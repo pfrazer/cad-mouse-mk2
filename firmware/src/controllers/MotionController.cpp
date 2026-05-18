@@ -86,8 +86,16 @@ float MotionController::sensitivityCurve(float value, float dead, float limit) {
   if (range <= 0.0f) return 0.0f;
   const float normalized = clampf((abs_val - dead) / range, 0.0f, 1.0f);
 
-  // Apply power curve and scale back to output range
-  return sign * powf(normalized, Config::SENSITIVITY_EXP) * limit;
+  // Use faster math for the recommended sensitivity exponents.
+  float shaped;
+  if (Config::SENSITIVITY_EXP == 3.0f) {
+    shaped = normalized * normalized * normalized;
+  } else if (Config::SENSITIVITY_EXP == 1.0f) {
+    shaped = normalized;
+  } else {
+    shaped = powf(normalized, Config::SENSITIVITY_EXP);
+  }
+  return sign * shaped * limit;
 }
 
 void MotionController::compute(const float raw[9], const float* baseline, float dt,
