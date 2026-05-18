@@ -56,4 +56,9 @@ const long IDLE_SLEEP_TIMEOUT_MS = 2 * 60 * 1000;
 // the calibration fails.
 const unsigned long CALIBRATION_TIMEOUT_MS = 5000;
 
+// How often to poll the mag sensors while sleeping
+const unsigned long SLEEP_KNOB_POLL_PERIOD_MS = 50;
+// How much the knob should deviate from baseline before waking
+const float SLEEP_KNOB_MOVEMENT_THRESHOLD = 3.0;
+
 }  // namespace Config

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
+
 #include "State.h"
 
 class SleepState : public State {
@@ -7,4 +9,9 @@ class SleepState : public State {
   void enter() override;
   void update() override;
   void exit() override;
+
+ private:
+  bool knobWasMoved();
+
+  unsigned long lastKnobPollMS = 0;
 };
