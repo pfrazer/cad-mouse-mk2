@@ -23,6 +23,9 @@ bool IdleState::handleCalibrationRequest() {
 void IdleState::runMotionPipeline(float dt, unsigned long now) {
   float raw[9] = {};
   if (!sensorController.readRaw(raw)) {
+    // Sensor problem; publish a neutral report to stop any motion
+    // previously published.
+    hidController.sendNeutralReport(inputController.buttonBits());
     return;  // Skip frame on sensor read failure
   }
 

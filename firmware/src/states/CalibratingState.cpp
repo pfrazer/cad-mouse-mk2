@@ -19,6 +19,9 @@ void CalibratingState::update() {
   ledController.updateSpinner();
   sensorController.updateCalibration();
 
+  // Keep activity from being published while calibrating.
+  hidController.sendNeutralReport(0);
+
   if (sensorController.calibrationDone()) {
     stateMachine.changeState(&StateMachine::idleState);
     return;

@@ -9,6 +9,10 @@ class HIDController {
   void task();
   bool sendReports(const float motion[6], uint16_t buttonBits);
 
+  // Sends a neutral HID report in cases where operational state changes
+  // or something is wrong.
+  bool sendNeutralReport(uint16_t buttonBits);
+
  private:
   struct __attribute__((packed)) ReportAxes {
     int16_t x, y, z, rx, ry, rz;

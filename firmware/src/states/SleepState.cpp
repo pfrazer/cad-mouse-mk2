@@ -10,6 +10,9 @@
 void SleepState::enter() {
   ledController.off();
   lastKnobPollMS = millis();
+
+  // Publish a neutral report before going to sleep.
+  hidController.sendNeutralReport(0);
 }
 
 void SleepState::update() {
