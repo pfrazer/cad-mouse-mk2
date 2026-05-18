@@ -76,7 +76,7 @@ bool SensorController::readRaw(float out[9]) {
   // Validate: reject frames where any axis reads exactly zero across all
   // components (likely I2C failure) or exceeds sane sensor range.
   for (int i = 0; i < 9; i++) {
-    if (fabs(out[i]) > 500.0f) return false;  // Way outside EXTRA_SHORT_RANGE
+    if (fabsf(out[i]) > 500.0f) return false;  // Way outside EXTRA_SHORT_RANGE
   }
   // Check for dead sensor (all three axes exactly zero)
   for (int s = 0; s < 3; s++) {

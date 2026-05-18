@@ -78,7 +78,7 @@ float MotionController::sensitivityCurve(float value, float dead, float limit) {
   // Map the post-dead-zone range [dead, limit] onto [0, limit] with a power curve.
   // This gives fine control at small deflections and fast motion at large ones.
   const float sign = (value >= 0.0f) ? 1.0f : -1.0f;
-  const float abs_val = fabs(value);
+  const float abs_val = fabsf(value);
   if (abs_val <= dead) return 0.0f;
 
   // Normalize to 0..1 within the active range
@@ -133,7 +133,7 @@ void MotionController::compute(const float raw[9], const float* baseline, float 
   for (int i = 0; i < 6; i++) {
     const float dead = axisBaseDead(i);
 
-    if (fabs(y[i]) < dead) {
+    if (fabsf(y[i]) < dead) {
       // Below dead zone: decay Kalman estimate toward zero gradually.
       // Preserve covariance so the filter doesn't jitter at the boundary.
       kalmanX_[i] *= 0.8f;
