@@ -47,8 +47,13 @@ const int LED_COUNT = 8;
 const int LED_BRIGHTNESS = 255;
 const unsigned long LED_IDLE_COLOR = 0x2200FF;
 const unsigned long LED_CALIBRATING_COLOR = 0xFFFF00;
+const unsigned long LED_ERROR_COLOR = 0xFF0000;
 
 // FSM timing
 const long IDLE_SLEEP_TIMEOUT_MS = 2 * 60 * 1000;
+
+// Calibration timeout period.  Display LED_ERROR_COLOR on LED ring if
+// the calibration fails.
+const unsigned long CALIBRATION_TIMEOUT_MS = 5000;
 
 }  // namespace Config

@@ -10,6 +10,8 @@ void CalibratingState::enter() {
   sensorController.beginCalibration();
   motionController.reset();
   ledController.startSpinner(Config::LED_CALIBRATING_COLOR);
+  startTimeMS = millis();
+  timedOut = false;
 }
 
 void CalibratingState::update() {
@@ -19,6 +21,14 @@ void CalibratingState::update() {
 
   if (sensorController.calibrationDone()) {
     stateMachine.changeState(&StateMachine::idleState);
+    return;
+  }
+
+  // Set the LED ring to LED_ERROR_COLOR if the calibration takes longer
+  // than CALIBRATION_TIMEOUT_MS to indicate a problem.  (potentially recoverable)  
+  if (!timedOut && (millis() - startTimeMS) >= Config::CALIBRATION_TIMEOUT_MS) {
+    ledController.setSolid(Config::LED_ERROR_COLOR);
+    timedOut = true;
   }
 }
 
