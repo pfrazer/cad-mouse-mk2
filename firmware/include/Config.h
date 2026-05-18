@@ -19,8 +19,10 @@ const int PIN_MAG3_LS = D8;
 const int ZERO_SAMPLES = 200;
 
 // Gains and sign fixes
-const float GAIN_T[3] = {28.0, 28.0, 24.0};
-const float GAIN_R[3] = {18.0, 18.0, 20.0};
+const float GAIN_T_POS[3] = {28.0, 28.0, 45.0}; // Z == UP
+const float GAIN_T_NEG[3] = {28.0, 28.0, 18.0}; // Z == DOWN
+const float GAIN_R_POS[3] = {20.0, 20.0, 22.0}; // Z == CW
+const float GAIN_R_NEG[3] = {20.0, 20.0, 30.0}; // Z == CCW
 const int SIGN_AXIS[6] = {-1, +1, -1, +1, +1, +1};
 
 // Dead zones

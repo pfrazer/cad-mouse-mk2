@@ -136,12 +136,12 @@ void MotionController::compute(const float raw[9], const float* baseline, float 
 
   // Apply sign fixes and gains
   float y[6];
-  y[AXIS_TX] = Config::SIGN_AXIS[AXIS_TX] * tx * Config::GAIN_T[AXIS_TX];
-  y[AXIS_TY] = Config::SIGN_AXIS[AXIS_TY] * ty * Config::GAIN_T[AXIS_TY];
-  y[AXIS_TZ] = Config::SIGN_AXIS[AXIS_TZ] * tz * Config::GAIN_T[AXIS_TZ];
-  y[AXIS_RX] = Config::SIGN_AXIS[AXIS_RX] * rx * Config::GAIN_R[AXIS_RX - 3];
-  y[AXIS_RY] = Config::SIGN_AXIS[AXIS_RY] * ry * Config::GAIN_R[AXIS_RY - 3];
-  y[AXIS_RZ] = Config::SIGN_AXIS[AXIS_RZ] * rz * Config::GAIN_R[AXIS_RZ - 3];
+  y[AXIS_TX] = Config::SIGN_AXIS[AXIS_TX] * tx * (tx > 0 ? Config::GAIN_T_POS[AXIS_TX] : Config::GAIN_T_NEG[AXIS_TX]);
+  y[AXIS_TY] = Config::SIGN_AXIS[AXIS_TY] * ty * (ty > 0 ? Config::GAIN_T_POS[AXIS_TY] : Config::GAIN_T_NEG[AXIS_TY]);
+  y[AXIS_TZ] = Config::SIGN_AXIS[AXIS_TZ] * tz * (tz > 0 ? Config::GAIN_T_POS[AXIS_TZ] : Config::GAIN_T_NEG[AXIS_TZ]);
+  y[AXIS_RX] = Config::SIGN_AXIS[AXIS_RX] * rx * (rx > 0 ? Config::GAIN_R_POS[AXIS_RX - 3] : Config::GAIN_R_NEG[AXIS_RX - 3]);
+  y[AXIS_RY] = Config::SIGN_AXIS[AXIS_RY] * ry * (ry > 0 ? Config::GAIN_R_POS[AXIS_RY - 3] : Config::GAIN_R_NEG[AXIS_RY - 3]);
+  y[AXIS_RZ] = Config::SIGN_AXIS[AXIS_RZ] * rz * (rz > 0 ? Config::GAIN_R_POS[AXIS_RZ - 3] : Config::GAIN_R_NEG[AXIS_RZ - 3]);
 
   // Kalman filter, sensitivity curve, dead zones, and clamp.
   motionActive_ = false;
