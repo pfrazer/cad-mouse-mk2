@@ -3,7 +3,7 @@
 #include "Config.h"
 
 namespace {
-const int kPrintEvery = 5;
+const int kPrintEvery = 25;
 }
 
 void TelemetryController::begin() { tick_ = 0; }
@@ -21,20 +21,20 @@ void TelemetryController::publish(const float motion[6], int buttonBits,
     return;
   }
 
-  Serial.print(">X:");
-  Serial.println(motion[0]);
-  Serial.print(">Y:");
-  Serial.println(motion[1]);
-  Serial.print(">Z:");
-  Serial.println(motion[2]);
-  Serial.print(">Rx:");
-  Serial.println(motion[3]);
-  Serial.print(">Ry:");
-  Serial.println(motion[4]);
-  Serial.print(">Rz:");
-  Serial.println(motion[5]);
-  Serial.print(">btn:");
-  Serial.println(buttonBits & 0x0003);
-  Serial.print(">hid:");
+  Serial.print("X:");
+  Serial.print(motion[0]);
+  Serial.print("  Y:");
+  Serial.print(motion[1]);
+  Serial.print("  Z:");
+  Serial.print(motion[2]);
+  Serial.print("    Rx:");
+  Serial.print(motion[3]);
+  Serial.print("  Ry:");
+  Serial.print(motion[4]);
+  Serial.print("  Rz:");
+  Serial.print(motion[5]);
+  Serial.print("    btn:");
+  Serial.print(buttonBits & 0x0003);
+  Serial.print("    hid:");
   Serial.println(hidReportSent ? 1 : 0);
 }
