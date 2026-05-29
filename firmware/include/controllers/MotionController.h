@@ -14,7 +14,7 @@ class MotionController {
   // Per-axis Kalman filter state
   float kalmanX_[6] = {};  // Estimated state
   float kalmanP_[6] = {};  // Estimate uncertainty (covariance)
-  float kalmanStep(int axis, float measurement);
+  float kalmanStep(int axis, float measurement, float dt);
 
   bool motionActive_ = false;
 };

@@ -30,9 +30,9 @@ const float DEAD_T = 16.0;
 const float DEAD_R = 20.0;
 
 // Kalman filter tuning
-// Process noise: how much we expect the true value to change per step.
+// Process noise: how much we expect the true value to change per second.
 // Higher = more responsive but noisier.
-const float KALMAN_Q = 0.5;
+const float KALMAN_Q = 50.0;
 // Measurement noise: how noisy the sensor readings are.
 // Higher = smoother but more latency.
 const float KALMAN_R = 4.0;

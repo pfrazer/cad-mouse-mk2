@@ -54,9 +54,9 @@ float MotionController::clampf(float v, float lo, float hi) {
   return v;
 }
 
-float MotionController::kalmanStep(int axis, float measurement) {
+float MotionController::kalmanStep(int axis, float measurement, float dt) {
   // Predict step: uncertainty grows by process noise
-  kalmanP_[axis] += Config::KALMAN_Q;
+  kalmanP_[axis] += Config::KALMAN_Q * dt;
 
   // Update step: compute Kalman gain
   const float K = kalmanP_[axis] / (kalmanP_[axis] + Config::KALMAN_R);
@@ -66,14 +66,6 @@ float MotionController::kalmanStep(int axis, float measurement) {
 
   // Update uncertainty
   kalmanP_[axis] *= (1.0f - K);
-  
-  // Keep Kalman estimate within the output range (anti-windup)
-  if (kalmanX_[axis] > Config::AXIS_LIMIT ||
-      kalmanX_[axis] < -Config::AXIS_LIMIT) {
-    kalmanX_[axis] =
-        clampf(kalmanX_[axis], -Config::AXIS_LIMIT, Config::AXIS_LIMIT);
-  }
-
   return kalmanX_[axis];
 }
 
@@ -107,6 +99,12 @@ float MotionController::sensitivityCurve(float value, float dead, float limit) {
 
 void MotionController::compute(const float raw[9], const float* baseline, float dt,
                                float out[6]) {
+  float filterDt = dt;
+  if (!(filterDt > 0.0f)) {
+    filterDt = 0.01f;
+  }
+  filterDt = clampf(filterDt, 0.001f, 0.1f);
+
   // Baseline subtraction converts magnetic deltas around the calibrated rest pose.
   const float mag1x = raw[RAW_MAG1_X] - baseline[RAW_MAG1_X];
   const float mag1y = raw[RAW_MAG1_Y] - baseline[RAW_MAG1_Y];
@@ -143,19 +141,12 @@ void MotionController::compute(const float raw[9], const float* baseline, float 
   y[AXIS_RY] = Config::SIGN_AXIS[AXIS_RY] * ry * (ry > 0 ? Config::GAIN_R_POS[AXIS_RY - 3] : Config::GAIN_R_NEG[AXIS_RY - 3]);
   y[AXIS_RZ] = Config::SIGN_AXIS[AXIS_RZ] * rz * (rz > 0 ? Config::GAIN_R_POS[AXIS_RZ - 3] : Config::GAIN_R_NEG[AXIS_RZ - 3]);
 
-  // Kalman filter, sensitivity curve, dead zones, and clamp.
+  // Kalman filter every measurement, then apply output shaping.
   motionActive_ = false;
   for (int i = 0; i < 6; i++) {
     const float dead = axisBaseDead(i);
 
-    if (fabsf(y[i]) < dead) {
-      // Below dead zone: decay Kalman estimate toward zero gradually.
-      // Preserve covariance so the filter doesn't jitter at the boundary.
-      kalmanX_[i] *= 0.8f;
-      kalmanP_[i] = fmin(kalmanP_[i] + Config::KALMAN_Q * 0.1f, 1.0f);
-    } else {
-      kalmanStep(i, y[i]);
-    }
+    kalmanStep(i, y[i], filterDt);
 
     // Apply sensitivity curve to filtered output
     out[i] = sensitivityCurve(kalmanX_[i], dead, Config::AXIS_LIMIT);
