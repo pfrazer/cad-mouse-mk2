@@ -31,6 +31,7 @@ void IdleState::runMotionPipeline(float dt, unsigned long now) {
 
   float motion[6] = {};
   motionController.compute(raw, sensorController.baseline(), dt, motion);
+  ledController.showMotion(motion);
 
   if (motionController.hasMotionActivity()) {
     lastActivityMs_ = now;
