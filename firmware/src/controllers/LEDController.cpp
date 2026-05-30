@@ -95,6 +95,10 @@ void LEDController::setSolid(unsigned long color) {
 }
 
 void LEDController::showMotion(const float motion[6]) {
+  if (mode_ == Mode::FadeIn || mode_ == Mode::FadeOut) {
+    return;
+  }
+
   mode_ = Mode::Motion;
   setPower(true);
   ring_.setBrightness(255);
@@ -126,6 +130,20 @@ void LEDController::showMotion(const float motion[6]) {
   ring_.show();
 }
 
+void LEDController::update() {
+  switch (mode_) {
+  case Mode::Spinner:
+    updateSpinner();
+    break;
+  case Mode::FadeIn:
+  case Mode::FadeOut:
+    updateFade();
+    break;
+  default:
+    break;
+  } 
+}
+
 void LEDController::startSpinner(unsigned long color) {
   mode_ = Mode::Spinner;
   ring_.setBrightness(Config::LED_BRIGHTNESS);
@@ -136,25 +154,74 @@ void LEDController::startSpinner(unsigned long color) {
 }
 
 void LEDController::updateSpinner() {
-  if (mode_ != Mode::Spinner) {
+  const uint32_t now = millis();
+
+  const int pixelCount = ring_.numPixels();
+  if (pixelCount <= 0) {
     return;
   }
 
-  const unsigned long now = millis();
-  if (lastSpinnerStepMs_ != 0 && (now - lastSpinnerStepMs_) < 60) {
-    return;
-  }
-  lastSpinnerStepMs_ = now;
+  // Preserve roughly the old rotation speed: 8 LEDs * 2 half-steps * 50ms.
+  const float rotationPeriodMs = 500;
+  const float phase = fmod(static_cast<float>(now), rotationPeriodMs) / rotationPeriodMs;
+  const float idealPosition = phase * static_cast<float>(pixelCount);
 
-  fillAll(0);
-  int pixelCount = ring_.numPixels();
-  ring_.setPixelColor(spinnerIndex_, color_);
+  const uint8_t baseR = (color_ >> 16) & 0xFF;
+  const uint8_t baseG = (color_ >> 8) & 0xFF;
+  const uint8_t baseB = color_ & 0xFF;
+
+  // Smooth distance-based illumination around the moving phase.
+  // In LED units: 1 lights nearest two strongly, >1 adds a soft tail.
+  const float falloffWidth = 1.0f;
+
+  for (int i = 0; i < pixelCount; ++i) {
+    float distance = fabsf(static_cast<float>(i) - idealPosition);
+    distance = fminf(distance, static_cast<float>(pixelCount) - distance);
+
+    float weight = 0.0f;
+    if (distance <= falloffWidth) {
+      const float t = distance / falloffWidth;
+      weight = 0.5f * (cosf(t * PI) + 1.0f);
+    }
+
+    const uint8_t r = static_cast<uint8_t>(baseR * weight + 0.5f);
+    const uint8_t g = static_cast<uint8_t>(baseG * weight + 0.5f);
+    const uint8_t b = static_cast<uint8_t>(baseB * weight + 0.5f);
+    ring_.setPixelColor(i, ring_.Color(r, g, b));
+  }
+
   ring_.show();
+}
 
-  spinnerIndex_++;
-  if (spinnerIndex_ >= pixelCount) {
-    spinnerIndex_ = 0;
+void LEDController::startFadeIn(unsigned long color, uint16_t durationMs) {
+  mode_ = Mode::FadeIn;
+  color_ = toNeoColor(color);
+  animationStartedAt_ = millis();
+  animationPeriod_ = durationMs;
+  setPower(true);
+}
+
+void LEDController::startFadeOut(uint16_t durationMs) {
+  mode_ = Mode::FadeOut;
+  animationStartedAt_ = millis();
+  animationPeriod_ = durationMs;
+}
+
+inline void LEDController::updateFade() {
+  const float progress = static_cast<float>(millis() - animationStartedAt_) / animationPeriod_;
+  if (progress >= 1.0f) {
+    if (mode_ == Mode::FadeIn) {
+      return setSolid(color_);
+    }
+    else {
+      return off();
+    }
   }
+
+  float brightness = (mode_ == Mode::FadeIn) ? (progress * Config::LED_BRIGHTNESS) : ((1.0f - progress) * Config::LED_BRIGHTNESS);
+  fillAll(color_);
+  ring_.setBrightness(brightness);
+  ring_.show();
 }
 
 void LEDController::off() {

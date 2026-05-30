@@ -16,7 +16,7 @@ void CalibratingState::enter() {
 
 void CalibratingState::update() {
   inputController.update();
-  ledController.updateSpinner();
+  ledController.update();
   sensorController.updateCalibration();
 
   // Keep activity from being published while calibrating.

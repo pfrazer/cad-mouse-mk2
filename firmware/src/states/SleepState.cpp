@@ -8,7 +8,7 @@
 #include "StateMachine.h"
 
 void SleepState::enter() {
-  ledController.off();
+  ledController.startFadeOut();
   lastKnobPollMS = millis();
 
   // Publish a neutral report before going to sleep.
@@ -17,6 +17,7 @@ void SleepState::enter() {
 
 void SleepState::update() {
   inputController.update();
+  ledController.update();
 
   if (inputController.takeActivity() || knobWasMoved()) {
     stateMachine.changeState(&StateMachine::idleState);
