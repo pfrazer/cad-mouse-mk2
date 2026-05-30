@@ -19,7 +19,7 @@ const int PIN_MAG3_LS = D8;
 const int ZERO_SAMPLES = 200;
 
 // Gains and sign fixes
-const float GAIN_T_POS[3] = {28.0, 28.0, 45.0}; // Z == UP
+const float GAIN_T_POS[3] = {28.0, 28.0, 50.0}; // Z == UP
 const float GAIN_T_NEG[3] = {28.0, 28.0, 18.0}; // Z == DOWN
 const float GAIN_R_POS[3] = {20.0, 20.0, 22.0}; // Z == CW
 const float GAIN_R_NEG[3] = {20.0, 20.0, 30.0}; // Z == CCW
@@ -60,7 +60,7 @@ const long IDLE_SLEEP_TIMEOUT_MS = 2 * 60 * 1000;
 const unsigned long CALIBRATION_TIMEOUT_MS = 5000;
 
 // How often to poll the mag sensors while sleeping
-const unsigned long SLEEP_KNOB_POLL_PERIOD_MS = 50;
+const unsigned long SLEEP_KNOB_POLL_PERIOD_MS = 100;
 // How much the knob should deviate from baseline before waking
 const float SLEEP_KNOB_MOVEMENT_THRESHOLD = 3.0;
 
