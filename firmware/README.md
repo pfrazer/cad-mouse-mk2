@@ -74,3 +74,6 @@ Calibration is done in firmware by
 
 Initial start triggers calibration and attempts to store it to LittleFS. Consecutive calibrations can be manually triggered by long press of both buttons simultaneously.
 
+### ToDo
+
+The filter settings and normalization limits may need further tuning.
