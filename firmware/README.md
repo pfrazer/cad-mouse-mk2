@@ -74,6 +74,21 @@ Calibration is done in firmware by
 
 Initial start triggers calibration and attempts to store it to LittleFS. Consecutive calibrations can be manually triggered by long press of both buttons simultaneously.
 
+### Quick Tuning Guide
+
+Main knobs in `firmware/include/config.h`:
+
+- `EKF_PROCESS_NOISE_STD`: higher = more responsive, lower = smoother
+- `EKF_SENSOR_NOISE_STD`: higher = smoother/less reactive, lower = more direct/more noisy
+- `NORMALIZATION_*_MAX`: higher = less sensitive axis, lower = more sensitive axis
+- `DEADZONE_*_THRESHOLD`: higher = less idle jitter, lower = finer micro-movements
+- `ISOLATION_POWER`: higher = stronger dominant-axis isolation
+
+For EKF tuning, set deadzone temporarily very small (recommended: `0.005` to `0.02`) so neutral jitter/spikes stay visible.
+
+Current normalization is symmetric (absolute max only, mapped to `[-1, 1]`).
+If one direction needs different scaling than the other, we may need separate `+/-` limits (for example for `Z`: push down `-Z` vs pull up `+Z` on lightweight builds without base weights).
+
 ### ToDo
 
 The filter settings and normalization limits may need further tuning.
