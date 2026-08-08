@@ -73,47 +73,91 @@ bool HallSensorController::readRaw(int16_t out[9])
     // but don't know why temperature is needed.
     // For now, just read magnetic field values.
 
-    // TODO: Original read functions are slow as they read all registers.
+    // Original read functions are slow as they read all registers.
     // Hence, implement a faster read function that reads only the necessary registers
     // still checking parity.
 
-    bool s1, s2, s3;
-    int16_t x, y, z;
+    // Safeguard initialization, despite never writing back to out if read or parity fails.
+    bool s1 = false, s2 = false, s3 = false;
+    int16_t x = INT16_MIN, y = INT16_MIN, z = INT16_MIN;
 
-    // s1 = m_sensor1.getRawMagneticField(&x, &y, &z);
+    // Attempt to read sensor 1, only write to out if successful
     s1 = readSingleSensorRawFast(m_sensor1.getI2CAddress() >> 1, &x, &y, &z);
-    out[0] = x;
-    out[1] = y;
-    out[2] = z;
+    if (s1) {
+        out[0] = x;
+        out[1] = y;
+        out[2] = z;
+    }
 
-    // s2 = m_sensor2.getRawMagneticField(&x, &y, &z);
+    // Reset
+    x = INT16_MIN;
+    y = INT16_MIN;
+    z = INT16_MIN;
+
+    // Attempt to read sensor 2, only write to out if successful
     s2 = readSingleSensorRawFast(m_sensor2.getI2CAddress() >> 1, &x, &y, &z);
-    out[3] = x;
-    out[4] = y;
-    out[5] = z;
+    if (s2) {
+        out[3] = x;
+        out[4] = y;
+        out[5] = z;
+    }
 
-    // s3 = m_sensor3.getRawMagneticField(&x, &y, &z);
+    // Reset
+    x = INT16_MIN;
+    y = INT16_MIN;
+    z = INT16_MIN;
+
+    // Attempt to read sensor 3, only write to out if successful
     s3 = readSingleSensorRawFast(m_sensor3.getI2CAddress() >> 1, &x, &y, &z);
-
-    out[6] = x;
-    out[7] = y;
-    out[8] = z;
+    if (s3) {
+        out[6] = x;
+        out[7] = y;
+        out[8] = z;
+    }
 
     return s1 && s2 && s3;
 }
 
 bool HallSensorController::read(float out[9])
 {
-    bool s;
-    int16_t rawData[9];
+    bool s1 = false, s2 = false, s3 = false;
+    int16_t x = INT16_MIN, y = INT16_MIN, z = INT16_MIN;
 
-    s = readRaw(rawData);
-
-    for (int i = 0; i < 9; ++i) {
-        out[i] = static_cast<float>(rawData[i]) / m_scaleFactor;
+    // Attempt to read sensor 1, only write to out if successful
+    s1 = readSingleSensorRawFast(m_sensor1.getI2CAddress() >> 1, &x, &y, &z);
+    if (s1) {
+        out[0] = static_cast<float>(x) / m_scaleFactor;
+        out[1] = static_cast<float>(y) / m_scaleFactor;
+        out[2] = static_cast<float>(z) / m_scaleFactor;
     }
 
-    return s;
+    // Reset
+    x = INT16_MIN;
+    y = INT16_MIN;
+    z = INT16_MIN;
+
+    // Attempt to read sensor 2, only write to out if successful
+    s2 = readSingleSensorRawFast(m_sensor2.getI2CAddress() >> 1, &x, &y, &z);
+    if (s2) {
+        out[3] = static_cast<float>(x) / m_scaleFactor;
+        out[4] = static_cast<float>(y) / m_scaleFactor;
+        out[5] = static_cast<float>(z) / m_scaleFactor;
+    }
+
+    // Reset
+    x = INT16_MIN;
+    y = INT16_MIN;
+    z = INT16_MIN;
+
+    // Attempt to read sensor 3, only write to out if successful
+    s3 = readSingleSensorRawFast(m_sensor3.getI2CAddress() >> 1, &x, &y, &z);
+    if (s3) {
+        out[6] = static_cast<float>(x) / m_scaleFactor;
+        out[7] = static_cast<float>(y) / m_scaleFactor;
+        out[8] = static_cast<float>(z) / m_scaleFactor;
+    }
+
+    return s1 && s2 && s3;
 }
 
 bool HallSensorController::readSingleSensorRawFast(uint8_t sensorAddress, int16_t* outX, int16_t* outY, int16_t* outZ)
@@ -124,8 +168,11 @@ bool HallSensorController::readSingleSensorRawFast(uint8_t sensorAddress, int16_
     if (m_wire.requestFrom(sensorAddress, static_cast<size_t>(7)) != 7)
         return false;
 
+    // Safeguarded by setting to zero, despite not ever writing back
+    // to outX, outY, outZ if read or parity fails
+    uint8_t b[7] = {0};
+
     // Read bytes
-    uint8_t b[7];
     for (int i = 0; i < 7; ++i) {
         b[i] = m_wire.read();
     }
