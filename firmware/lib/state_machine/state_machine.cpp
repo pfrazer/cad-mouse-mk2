@@ -243,6 +243,8 @@ void StateMachine::handle_CALIBRATE_COMPUTE()
     bool calibration_success = Calibration::compute_calibration(magnetic_moments, offsets, m_dipole_model);
 
     if (calibration_success) {
+        STATE_LOG_PRINTLN("Calibration successful, applying new calibration and saving to file.");
+
         // Calibration successful, apply the new calibration to the DipoleModel
         m_dipole_model.set_magnetic_moments(magnetic_moments);
         m_dipole_model.set_offsets(offsets);
@@ -254,16 +256,21 @@ void StateMachine::handle_CALIBRATE_COMPUTE()
 
         if (Calibration::save_calibration_data(new_data)) {
             m_led_controller.queue_blinking_animation(LED_SUCCESS_COLOR, 200, 200, 1); // blink GREEN one time to indicate successful calibration & save
+            STATE_LOG_PRINTLN("Calibration data saved successfully.");
+            m_calibration_load_state = Calibration::LoadState::CALIBRATION_SUCCESSFUL_SAVED;
             enter_RUNNING();
         }
         else {
             // Failed to save calibration data to file, but calibration was successful
             m_led_controller.queue_blinking_animation(LED_CALIBRATION_FAILURE_COLOR, 200, 200, 4); // blink MAGENTA four times to indicate calibration success but save failure
+            STATE_LOG_PRINTLN("Calibration successful, but failed to save calibration data to file.");
+            m_calibration_load_state = Calibration::LoadState::CALIBRATION_SUCCESSFUL_SAVED_FAILED;
             enter_RUNNING();
         }
     }
     else {
         // Calibration failed, indicate failure and proceed to RUNNING_WITHOUT_CALIBRATION state
+        STATE_LOG_PRINTLN("Calibration failed, checking calibration load state.");
         if (get_calibration_load_state() == Calibration::LoadState::NO_FILE_USING_DEFAULTS) {
             // Never had any calibration data, so we are running without calibration
             m_calibration_load_state = Calibration::LoadState::CALIBRATION_FAILED;
