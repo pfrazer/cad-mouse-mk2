@@ -437,7 +437,6 @@ void loop()
         MAIN_LOG_PRINTLN("Right button released");
         buttons &= ~0x0002; // Clear bit 1 for right button release
     }
-    hidController.task();
     hidController.sendReport(latest_estimated_state, buttons);
 
     // LED controller update
