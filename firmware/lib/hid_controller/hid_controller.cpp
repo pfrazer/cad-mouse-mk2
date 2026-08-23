@@ -104,27 +104,19 @@ void HIDController::sendReport(float filtered_state[12], uint16_t buttons)
 
     ReportAxes new_axes = makeReportAxes(filtered_state);
     ReportButtons new_buttons = makeReportButtons(buttons);
-    bool axes_changed = axesChanged(new_axes);
-    bool buttons_changed = buttonsChanged(new_buttons);
 
-    if (axes_changed) {
-        m_report_axes = new_axes;
-        m_hid.sendReport(0x01, &m_report_axes, sizeof(m_report_axes));
-    }
+    // Sent axes report
+    m_report_axes = new_axes;
+    m_hid.sendReport(0x01, &m_report_axes, sizeof(m_report_axes));
 
-    if (axes_changed && buttons_changed) {
-        // Need a task between reports
-        task();
-    }
+    // Need a task between reports
+    task();
 
-    if (buttons_changed) {
-        m_report_buttons = new_buttons;
-        m_hid.sendReport(0x03, &m_report_buttons, sizeof(m_report_buttons));
-    }
+    // Send buttons report
+    m_report_buttons = new_buttons;
+    m_hid.sendReport(0x03, &m_report_buttons, sizeof(m_report_buttons));
 
-    if (axes_changed || buttons_changed) {
-        m_last_sent_time_ms = now; // Update the timestamp of the last sent report
-    }
+    m_last_sent_time_ms = now; // Update the timestamp of the last sent report
 }
 
 uint32_t HIDController::get_last_report_time_ms()
