@@ -67,7 +67,7 @@ void HallSensorController::powerOn(uint8_t pin)
     delay(5);
 }
 
-bool HallSensorController::readRaw(int16_t out[9])
+uint8_t HallSensorController::readRaw(int16_t out[9])
 {
     // TODO: Original code uses getRawMagneticFieldAndTemperature,
     // but don't know why temperature is needed.
@@ -77,17 +77,18 @@ bool HallSensorController::readRaw(int16_t out[9])
     // Hence, implement a faster read function that reads only the necessary registers
     // still checking parity.
 
-    // Safeguard initialization, despite never writing back to out if read or parity fails.
-    bool s1 = false, s2 = false, s3 = false;
+    uint8_t status = HALL_STATUS_OK;
     int16_t x = INT16_MIN, y = INT16_MIN, z = INT16_MIN;
 
     // Attempt to read sensor 1, only write to out if successful
-    s1 = readSingleSensorRawFast(m_sensor1.getI2CAddress() >> 1, &x, &y, &z);
-    if (s1) {
+    if (readSingleSensorRawFast(m_sensor1.getI2CAddress() >> 1, &x, &y, &z)) {
         out[0] = x;
         out[1] = y;
         out[2] = z;
     }
+    else {
+        status |= HALL_STATUS_S1_FAIL;
+    }
 
     // Reset
     x = INT16_MIN;
@@ -95,12 +96,14 @@ bool HallSensorController::readRaw(int16_t out[9])
     z = INT16_MIN;
 
     // Attempt to read sensor 2, only write to out if successful
-    s2 = readSingleSensorRawFast(m_sensor2.getI2CAddress() >> 1, &x, &y, &z);
-    if (s2) {
+    if (readSingleSensorRawFast(m_sensor2.getI2CAddress() >> 1, &x, &y, &z)) {
         out[3] = x;
         out[4] = y;
         out[5] = z;
     }
+    else {
+        status |= HALL_STATUS_S2_FAIL;
+    }
 
     // Reset
     x = INT16_MIN;
@@ -108,56 +111,40 @@ bool HallSensorController::readRaw(int16_t out[9])
     z = INT16_MIN;
 
     // Attempt to read sensor 3, only write to out if successful
-    s3 = readSingleSensorRawFast(m_sensor3.getI2CAddress() >> 1, &x, &y, &z);
-    if (s3) {
+    if (readSingleSensorRawFast(m_sensor3.getI2CAddress() >> 1, &x, &y, &z)) {
         out[6] = x;
         out[7] = y;
         out[8] = z;
     }
+    else {
+        status |= HALL_STATUS_S3_FAIL;
+    }
 
-    return s1 && s2 && s3;
+    return status;
 }
 
-bool HallSensorController::read(float out[9])
+uint8_t HallSensorController::read(float out[9])
 {
-    bool s1 = false, s2 = false, s3 = false;
-    int16_t x = INT16_MIN, y = INT16_MIN, z = INT16_MIN;
+    int16_t raw[9];
+    const uint8_t status = readRaw(raw);
 
-    // Attempt to read sensor 1, only write to out if successful
-    s1 = readSingleSensorRawFast(m_sensor1.getI2CAddress() >> 1, &x, &y, &z);
-    if (s1) {
-        out[0] = static_cast<float>(x) / m_scaleFactor;
-        out[1] = static_cast<float>(y) / m_scaleFactor;
-        out[2] = static_cast<float>(z) / m_scaleFactor;
+    // Per sensor: convert to float on success, NaN on failure, guided by the readRaw status mask.
+    for (int sensorIdx = 0; sensorIdx < 3; ++sensorIdx) {
+        const uint8_t failMask = 1u << sensorIdx;
+        const int base = sensorIdx * 3;
+        if (status & failMask) {
+            out[base] = NAN;
+            out[base + 1] = NAN;
+            out[base + 2] = NAN;
+        }
+        else {
+            out[base] = static_cast<float>(raw[base]) / m_scaleFactor;
+            out[base + 1] = static_cast<float>(raw[base + 1]) / m_scaleFactor;
+            out[base + 2] = static_cast<float>(raw[base + 2]) / m_scaleFactor;
+        }
     }
 
-    // Reset
-    x = INT16_MIN;
-    y = INT16_MIN;
-    z = INT16_MIN;
-
-    // Attempt to read sensor 2, only write to out if successful
-    s2 = readSingleSensorRawFast(m_sensor2.getI2CAddress() >> 1, &x, &y, &z);
-    if (s2) {
-        out[3] = static_cast<float>(x) / m_scaleFactor;
-        out[4] = static_cast<float>(y) / m_scaleFactor;
-        out[5] = static_cast<float>(z) / m_scaleFactor;
-    }
-
-    // Reset
-    x = INT16_MIN;
-    y = INT16_MIN;
-    z = INT16_MIN;
-
-    // Attempt to read sensor 3, only write to out if successful
-    s3 = readSingleSensorRawFast(m_sensor3.getI2CAddress() >> 1, &x, &y, &z);
-    if (s3) {
-        out[6] = static_cast<float>(x) / m_scaleFactor;
-        out[7] = static_cast<float>(y) / m_scaleFactor;
-        out[8] = static_cast<float>(z) / m_scaleFactor;
-    }
-
-    return s1 && s2 && s3;
+    return status;
 }
 
 bool HallSensorController::readSingleSensorRawFast(uint8_t sensorAddress, int16_t* outX, int16_t* outY, int16_t* outZ)

@@ -6,13 +6,29 @@
 
 using namespace ifx::tlx493d;
 
+// Bitmask returned by readRaw()/read(): 0 means all sensors okay, each bit flags one failed sensor.
+enum HallSensorStatus : uint8_t {
+    HALL_STATUS_OK = 0x00,
+    HALL_STATUS_S1_FAIL = 0x01,
+    HALL_STATUS_S2_FAIL = 0x02,
+    HALL_STATUS_S3_FAIL = 0x04,
+};
+
 class HallSensorController {
 public:
     HallSensorController(TwoWire& wire, uint8_t sensor1PowerPin, uint8_t sensor2PowerPin, uint8_t sensor3PowerPin, bool fullRange = true);
 
     void begin();
-    bool readRaw(int16_t out[9]);
-    bool read(float out[9]);
+
+    /// @brief Reads raw 12-bit magnetic field values from all three sensors.
+    /// @param out 9-element array filled as [s1x,s1y,s1z, s2x,s2y,s2z, s3x,s3y,s3z]; entries for a failed sensor are left untouched.
+    /// @return HallSensorStatus bitmask, HALL_STATUS_OK if all sensors were read successfully.
+    uint8_t readRaw(int16_t out[9]);
+
+    /// @brief Reads magnetic field values from all three sensors, scaled to mT.
+    /// @param out 9-element array filled as [s1x,s1y,s1z, s2x,s2y,s2z, s3x,s3y,s3z]; entries for a failed sensor are set to NAN.
+    /// @return HallSensorStatus bitmask, HALL_STATUS_OK if all sensors were read successfully.
+    uint8_t read(float out[9]);
 
     void printControlRegisters();
     void printControlRegisters(uint8_t sensorID);

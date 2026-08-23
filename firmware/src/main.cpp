@@ -196,7 +196,7 @@ void loop()
 {
     const uint32_t now = millis();
     float rawSensorData[9];
-    bool sensor_status;
+    uint8_t sensor_status;
 
     StateMachine::State current_state = stateMachine.get_state();
 
@@ -218,7 +218,7 @@ void loop()
             Helpers::print_raw_sensor_data(rawSensorData);
 #endif
 
-            stateMachine.handle_CHECK_SENSORS(sensor_status);
+            stateMachine.handle_CHECK_SENSORS(sensor_status == HALL_STATUS_OK);
             break;
         }
 
@@ -254,7 +254,7 @@ void loop()
             // Read raw sensor data from the hall sensors and add it to the calibration samples
             if (now - stateMachine.get_last_calibration_sample_time_ms() >= CALIBRATION_SAMPLE_DELAY_MS) {
                 sensor_status = hallController.read(rawSensorData);
-                if (sensor_status) {
+                if (sensor_status == HALL_STATUS_OK) {
                     Calibration::add_sample(rawSensorData);
                     stateMachine.set_last_calibration_sample_time_ms(now);
                 }
@@ -348,7 +348,7 @@ void loop()
             sensor_status = hallController.read(rawSensorData);
             PERFORMANCE_END(0, PerformanceProfiler::Section::CORE0_SENSOR_READ);
 
-            if (sensor_status) {
+            if (sensor_status == HALL_STATUS_OK) {
                 PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_HANDOVER);
                 const uint32_t seq0 = raw_mailbox_seq;
                 raw_mailbox_seq = seq0 + 1u; // mark write-in-progress (odd)
