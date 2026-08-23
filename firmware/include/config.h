@@ -8,7 +8,7 @@
 #define PIN_MAG3_LS D8
 
 // RGB LEDs
-#define LED_COUNT 7
+#define LED_COUNT 8
 #define LED_BRIGHTNESS 100                             // 0 to 255
 #define LED_BOOT_COLOR 0xFFFF00                        // Yellow
 #define LED_ERROR_COLOR 0xFF0000                       // Red
