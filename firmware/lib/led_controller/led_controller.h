@@ -58,7 +58,10 @@ public:
     void begin();
     void on();
     void off();
-    void update(); // Call this in the main loop to update the LED state
+    void fade_on(uint32_t hex_color, uint32_t duration_ms);
+    void fade_off(uint32_t duration_ms);
+    // Inputs are normalized knob translation/tilt values in the range [-1, 1].
+    void update(float input_x = 0.0f, float input_y = 0.0f, float input_rx = 0.0f, float input_ry = 0.0f);
 
     /*
         PERMANENT ANIMATION FUNCTIONS
@@ -93,9 +96,21 @@ private:
     // Track the last update time for any animation
     uint32_t m_last_update_time_ms{0};
 
+    // Non-blocking power transition state. Pixel values are stored at their
+    // rendered brightness so each channel can be interpolated independently.
+    static constexpr uint8_t MAX_FADE_LEDS = 8;
+    bool m_fade_active{false};
+    bool m_fade_turn_off_when_complete{false};
+    uint32_t m_fade_start_time_ms{0};
+    uint32_t m_fade_duration_ms{0};
+    uint8_t m_fade_start_rgb[MAX_FADE_LEDS][3]{};
+    uint8_t m_fade_target_rgb[MAX_FADE_LEDS][3]{};
+
     // General helper functions
     bool is_on();
     void hex_to_rgb(uint32_t hex_color, uint8_t& r, uint8_t& g, uint8_t& b);
+    void start_fade(uint32_t target_color, uint8_t target_brightness, uint32_t duration_ms, bool turn_off_when_complete);
+    void update_fade();
 
     // Permanent animation state variables and functions
     PermanentState m_current_state;  // Store the current permanent state
@@ -118,6 +133,7 @@ private:
 
     // Individual mode functions
     void update_solid();
+    void update_input(float direction_x, float direction_y);
     void update_blinking();
     void update_pulse();
     uint8_t first_spinner_LED(bool clockwise);

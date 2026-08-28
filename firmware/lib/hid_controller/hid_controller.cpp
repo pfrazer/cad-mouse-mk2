@@ -113,6 +113,9 @@ void HIDController::sendReport(float filtered_state[12], uint16_t buttons)
     }
 
     ReportAxes new_axes = makeReportAxes(filtered_state);
+    if (!axesChanged(new_axes, now)) {
+        return;
+    }
 
     // Sent axes report
     m_report_axes = new_axes;
@@ -149,14 +152,25 @@ HIDController::ReportButtons HIDController::makeReportButtons(uint16_t buttons)
     return report_buttons;
 }
 
-bool HIDController::axesChanged(const ReportAxes& new_axes)
+bool HIDController::axesChanged(const ReportAxes& new_axes, const uint32_t now)
 {
-    return new_axes.x != m_report_axes.x ||   //
-           new_axes.y != m_report_axes.y ||   //
-           new_axes.z != m_report_axes.z ||   //
-           new_axes.rx != m_report_axes.rx || //
-           new_axes.ry != m_report_axes.ry || //
-           new_axes.rz != m_report_axes.rz;
+    if (new_axes.x != m_report_axes.x ||   //
+        new_axes.y != m_report_axes.y ||   //
+        new_axes.z != m_report_axes.z ||   //
+        new_axes.rx != m_report_axes.rx || //
+        new_axes.ry != m_report_axes.ry || //
+        new_axes.rz != m_report_axes.rz) {
+        return true;
+    }
+    else if (now - m_last_sent_time_ms > 50 && (new_axes.x != 0 ||  //
+                                                new_axes.y != 0 ||  //
+                                                new_axes.z != 0 ||  //
+                                                new_axes.rx != 0 || //
+                                                new_axes.ry != 0 || //
+                                                new_axes.rz != 0)) {
+        return true;
+    }
+    return false;
 }
 
 bool HIDController::buttonsChanged(const ReportButtons& new_buttons)

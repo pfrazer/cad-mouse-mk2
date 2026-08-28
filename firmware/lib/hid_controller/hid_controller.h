@@ -36,6 +36,6 @@ private:
     ReportAxes makeReportAxes(float filtered_state[12]);
     ReportButtons makeReportButtons(uint16_t buttons);
 
-    bool axesChanged(const ReportAxes& new_axes);
+    bool axesChanged(const ReportAxes& new_axes, const uint32_t now);
     bool buttonsChanged(const ReportButtons& new_buttons);
 };

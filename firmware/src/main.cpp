@@ -440,7 +440,11 @@ void loop()
     hidController.sendReport(latest_estimated_state, buttons);
 
     // LED controller update
-    ledController.update();
+    ledController.update(
+      latest_estimated_state[0],
+      latest_estimated_state[1],
+      latest_estimated_state[3],
+      latest_estimated_state[4]);
 
 #if defined(ENABLE_PERFORMANCE_PROFILING) && (PERFORMANCE_PROFILING_LEVEL >= 2)
     PerformanceProfiler::print_if_due(0, now, PERFORMANCE_PRINT_INTERVAL_MS);
