@@ -97,6 +97,8 @@ void HIDController::sendReport(float filtered_state[12], uint16_t buttons)
         return; // HID device not ready to send report
     }
 
+    const uint32_t now = millis();
+
     // Button report only sent when changed, regardless of HID_REPORT_INTERVAL_MS
     ReportButtons new_buttons = makeReportButtons(buttons);
     bool buttons_changed = buttonsChanged(new_buttons);
@@ -104,10 +106,10 @@ void HIDController::sendReport(float filtered_state[12], uint16_t buttons)
         m_report_buttons = new_buttons;
         m_hid.sendReport(0x03, &m_report_buttons, sizeof(m_report_buttons));
         task();
+        m_last_sent_time_ms = now; // Update the timestamp of the last sent report
     }
 
     // Check if enough time has passed since the last axes report was sent
-    const uint32_t now = millis();
     if (now - m_last_sent_time_ms < HID_REPORT_INTERVAL_MS) {
         return;
     }
