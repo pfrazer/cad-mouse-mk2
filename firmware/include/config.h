@@ -19,6 +19,7 @@
 #define LED_RUNNING_COLOR 0xFFFFFF                     // White
 #define LED_INPUT_COLOR 0xFFFFFF                       // White
 #define LED_RUNNING_WITHOUT_CALIBRATION_COLOR 0xFF6600 // Orange
+#define LED_USE_INPUT_GLOW_EFFECT true                 // Set false to disable LED input glow effect
 
 // State Machine
 #define BOOT_DELAY_MS 1000

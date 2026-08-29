@@ -734,7 +734,7 @@ void LEDController::update(float input_x, float input_y, float input_rx, float i
         }
     }
 
-    if (!m_animation_running && m_current_state.mode == Mode::SOLID && m_current_state.color == LED_RUNNING_COLOR) {
+    if (LED_USE_INPUT_GLOW_EFFECT && !m_animation_running && m_current_state.mode == Mode::SOLID && m_current_state.color == LED_RUNNING_COLOR) {
         // A rightward translation (+X) and a rightward tilt (+RY) point to the
         // same LEDs. Likewise, a forward/up-ring tilt is represented by -RX.
         update_input(input_x + input_ry, input_y - input_rx);
