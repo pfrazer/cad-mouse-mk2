@@ -77,7 +77,7 @@ public:
             Normal operation state
             - Read raw sensor data, send to Core 1 for processing, and check for Core 1 response
             - TODO: Send HID data at fixed intervals > dt of Kalman
-            - Visualizer (permanent): Solid WHITE LED to indicate normal operation with calibration
+            - Visualizer (permanent): Solid LED_RUNNING_COLOR LED to indicate normal operation with calibration
         */
         RUNNING,
         /*

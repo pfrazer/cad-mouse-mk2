@@ -47,6 +47,8 @@ String StateMachine::get_state_name()
             return "RUNNING";
         case State::RUNNING_WITHOUT_CALIBRATION:
             return "RUNNING_WITHOUT_CALIBRATION";
+        case State::RUNNING_NO_LED:
+            return "RUNNING_NO_LED";
         default:
             return "UNKNOWN_STATE";
     }
@@ -143,9 +145,15 @@ void StateMachine::enter_CALIBRATE_COMPUTE()
 
 void StateMachine::enter_RUNNING()
 {
+    const State old_state = m_state;
     if (change_state(State::RUNNING)) {
-        m_led_controller.set_solid(LED_RUNNING_COLOR); // Solid WHITE LED
-        m_led_controller.on();
+        if (old_state == State::RUNNING_NO_LED) {
+            m_led_controller.fade_on(LED_RUNNING_COLOR, 1000);
+        }
+        else {
+            m_led_controller.set_solid(LED_RUNNING_COLOR); // Solid LEDs
+            m_led_controller.on();
+        }
 
         m_last_filtered_data_received_time_ms = millis(); // Reset the timeout timer for filtered data reception
     }
@@ -163,8 +171,14 @@ void StateMachine::enter_RUNNING_WITHOUT_CALIBRATION()
 
 void StateMachine::enter_RUNNING_NO_LED()
 {
+    const State old_state = m_state;
     if (change_state(State::RUNNING_NO_LED)) {
-        m_led_controller.off(); // Turn off LED
+        if (old_state == State::RUNNING) {
+            m_led_controller.fade_off(2000);
+        }
+        else {
+            m_led_controller.off(); // Turn off LED
+        }
 
         m_last_filtered_data_received_time_ms = millis(); // Reset the timeout timer for filtered data reception
     }

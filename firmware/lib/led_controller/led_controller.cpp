@@ -2,6 +2,56 @@
 
 #include "led_controller.h"
 
+#include <math.h>
+
+namespace {
+    // D1 is at 11 o'clock and the LED indices advance counter-clockwise.
+    // These unit vectors point from the center of the ring toward D1-D8.
+    constexpr float LED_DIRECTION_X[8] = {
+      -0.38268343f,
+      -0.92387953f,
+      -0.92387953f,
+      -0.38268343f,
+      0.38268343f,
+      0.92387953f,
+      0.92387953f,
+      0.38268343f,
+    };
+    constexpr float LED_DIRECTION_Y[8] = {
+      0.92387953f,
+      0.38268343f,
+      -0.38268343f,
+      -0.92387953f,
+      -0.92387953f,
+      -0.38268343f,
+      0.38268343f,
+      0.92387953f,
+    };
+
+    float clamp_unit(float value)
+    {
+        if (value < 0.0f) {
+            return 0.0f;
+        }
+        if (value > 1.0f) {
+            return 1.0f;
+        }
+        return value;
+    }
+
+    uint8_t lerp_channel(uint8_t from, uint8_t to, float amount)
+    {
+        return static_cast<uint8_t>(from + (to - from) * amount + 0.5f);
+    }
+
+    uint8_t apply_brightness(uint8_t channel, uint8_t brightness)
+    {
+        // Match Adafruit_NeoPixel::setBrightness(), including its 255 = full
+        // brightness behavior, while allowing a different value per LED.
+        return static_cast<uint16_t>(channel) * (brightness + 1u) >> 8;
+    }
+}
+
 /*
     GENERAL FUNCTIONS
 */
@@ -38,6 +88,7 @@ void LEDController::begin()
 
 void LEDController::on()
 {
+    m_fade_active = false;
     digitalWrite(m_pinLS, HIGH);
     m_last_update_time_ms = 0; // Reset so that when turned back on, the animation starts fresh
     m_current_state.on = true; // Update the permanent state to reflect that the LEDs are on
@@ -46,10 +97,88 @@ void LEDController::on()
 
 void LEDController::off()
 {
+    m_fade_active = false;
     digitalWrite(m_pinLS, LOW);
     m_last_update_time_ms = 0;  // Reset so that when turned back on, the animation starts fresh
     m_current_state.on = false; // Update the permanent state to reflect that the LEDs are off
     delay(10);                  // Wait for the latch signal to stabilize
+}
+
+void LEDController::fade_on(uint32_t hex_color, uint32_t duration_ms)
+{
+    m_current_state.mode = Mode::SOLID;
+    m_current_state.color = hex_color;
+    m_current_state.step1_ms = 0;
+    m_current_state.step2_ms = 0;
+    m_current_state.mode_state = 0;
+    m_current_state.mode_clockwise = true;
+    m_current_state.submode = SubMode::NONE;
+
+    // The completed fade-out leaves zeroes in the pixel buffer, so powering
+    // the ring back up cannot flash the previous running color.
+    if (!is_on()) {
+        on();
+    }
+    start_fade(hex_color, LED_BRIGHTNESS, duration_ms, false);
+}
+
+void LEDController::fade_off(uint32_t duration_ms)
+{
+    if (!is_on()) {
+        return;
+    }
+    start_fade(0x000000, 0, duration_ms, true);
+}
+
+void LEDController::start_fade(uint32_t target_color, uint8_t target_brightness, uint32_t duration_ms, bool turn_off_when_complete)
+{
+    uint8_t target_r, target_g, target_b;
+    hex_to_rgb(target_color, target_r, target_g, target_b);
+    target_r = apply_brightness(target_r, target_brightness);
+    target_g = apply_brightness(target_g, target_brightness);
+    target_b = apply_brightness(target_b, target_brightness);
+
+    // Capture the bytes currently being sent to the LEDs before changing the
+    // strip's global brightness. This also allows a fade to reverse smoothly.
+    for (uint8_t i = 0; i < m_numLEDs && i < MAX_FADE_LEDS; ++i) {
+        const uint32_t color = m_leds.getPixelColor(i);
+        m_fade_start_rgb[i][0] = (color >> 16) & 0xFF;
+        m_fade_start_rgb[i][1] = (color >> 8) & 0xFF;
+        m_fade_start_rgb[i][2] = color & 0xFF;
+        m_fade_target_rgb[i][0] = target_r;
+        m_fade_target_rgb[i][1] = target_g;
+        m_fade_target_rgb[i][2] = target_b;
+    }
+
+    m_leds.setBrightness(255);
+    m_fade_start_time_ms = millis();
+    m_fade_duration_ms = duration_ms;
+    m_fade_turn_off_when_complete = turn_off_when_complete;
+    m_fade_active = true;
+}
+
+void LEDController::update_fade()
+{
+    const uint32_t elapsed_ms = millis() - m_fade_start_time_ms;
+    const float progress = m_fade_duration_ms == 0
+                             ? 1.0f
+                             : clamp_unit(static_cast<float>(elapsed_ms) / m_fade_duration_ms);
+
+    for (uint8_t i = 0; i < m_numLEDs && i < MAX_FADE_LEDS; ++i) {
+        m_leds.setPixelColor(i, m_leds.Color(
+                                  lerp_channel(m_fade_start_rgb[i][0], m_fade_target_rgb[i][0], progress),
+                                  lerp_channel(m_fade_start_rgb[i][1], m_fade_target_rgb[i][1], progress),
+                                  lerp_channel(m_fade_start_rgb[i][2], m_fade_target_rgb[i][2], progress)));
+    }
+    m_leds.show();
+
+    if (progress >= 1.0f) {
+        const bool turn_off = m_fade_turn_off_when_complete;
+        m_fade_active = false;
+        if (turn_off) {
+            off();
+        }
+    }
 }
 
 /*
@@ -101,6 +230,8 @@ bool LEDController::queue_solid_animation(uint32_t hex_color, uint32_t step1_ms)
 
 void LEDController::update_solid()
 {
+    m_leds.setBrightness(LED_BRIGHTNESS);
+
     if (m_animation_running) {
         const uint32_t now = millis();
         if (now - m_last_update_time_ms > m_current_state.step1_ms) {
@@ -121,6 +252,58 @@ void LEDController::update_solid()
     // Fill all LEDs with the specified color
     for (uint8_t i = 0; i < m_leds.numPixels(); ++i) {
         m_leds.setPixelColor(i, m_leds.Color(r, g, b));
+    }
+
+    m_leds.show();
+}
+
+void LEDController::update_input(float input_x, float input_y)
+{
+    const float magnitude = clamp_unit(sqrtf(input_x * input_x + input_y * input_y));
+
+    uint8_t running_r, running_g, running_b;
+    uint8_t input_r, input_g, input_b;
+    hex_to_rgb(LED_RUNNING_COLOR, running_r, running_g, running_b);
+    hex_to_rgb(LED_INPUT_GLOW_COLOR, input_r, input_g, input_b);
+
+    // Per-pixel brightness is encoded into the RGB channels so LEDs can have
+    // different brightness levels. Global brightness must therefore be 255.
+    m_leds.setBrightness(255);
+
+    float direction_x = 0.0f;
+    float direction_y = 0.0f;
+    float strongest_projection = 1.0f;
+    if (magnitude > 0.0f) {
+        direction_x = input_x / magnitude;
+        direction_y = input_y / magnitude;
+
+        // Normalize against the best-aligned LED. A full right input therefore
+        // drives both right-side LEDs (D6 and D7) all the way to the target.
+        strongest_projection = 0.0f;
+        for (uint8_t i = 0; i < m_numLEDs && i < 8; ++i) {
+            const float projection = direction_x * LED_DIRECTION_X[i] + direction_y * LED_DIRECTION_Y[i];
+            if (projection > strongest_projection) {
+                strongest_projection = projection;
+            }
+        }
+    }
+
+    for (uint8_t i = 0; i < m_leds.numPixels(); ++i) {
+        float influence = 0.0f;
+        if (magnitude > 0.0f && i < 8) {
+            const float projection = direction_x * LED_DIRECTION_X[i] + direction_y * LED_DIRECTION_Y[i];
+            influence = clamp_unit(magnitude * projection / strongest_projection);
+        }
+
+        const uint8_t brightness = lerp_channel(LED_BRIGHTNESS, LED_INPUT_GLOW_MAX_BRIGHTNESS, influence);
+        const uint8_t r = lerp_channel(running_r, input_r, influence);
+        const uint8_t g = lerp_channel(running_g, input_g, influence);
+        const uint8_t b = lerp_channel(running_b, input_b, influence);
+
+        m_leds.setPixelColor(i, m_leds.Color(
+                                  apply_brightness(r, brightness),
+                                  apply_brightness(g, brightness),
+                                  apply_brightness(b, brightness)));
     }
 
     m_leds.show();
@@ -155,6 +338,8 @@ void LEDController::set_blinking(uint32_t hex_color, uint32_t on_duration_ms, ui
 
 void LEDController::update_blinking()
 {
+    m_leds.setBrightness(LED_BRIGHTNESS);
+
     uint32_t now = millis();
     if (now - m_last_update_time_ms >= (m_current_state.mode_state ? m_current_state.step1_ms : m_current_state.step2_ms)) {
         // Handle decrementing remaining steps for temporary animations
@@ -245,6 +430,8 @@ bool LEDController::queue_pulse_animation(uint32_t hex_color, uint32_t pulse_dur
 
 void LEDController::update_pulse()
 {
+    m_leds.setBrightness(LED_BRIGHTNESS);
+
     uint32_t now = millis();
     if (now - m_last_update_time_ms >= m_current_state.step2_ms) {
         // Handle decrementing remaining steps for temporary animations
@@ -352,6 +539,8 @@ bool LEDController::queue_spinner_animation(uint32_t hex_color, uint32_t spin_sp
 
 void LEDController::update_spinner()
 {
+    m_leds.setBrightness(LED_BRIGHTNESS);
+
     uint32_t now = millis();
     if (now - m_last_update_time_ms >= m_current_state.step1_ms) {
         // Handle decrementing remaining steps for temporary animations
@@ -524,8 +713,13 @@ bool LEDController::queue_blinking_animation(uint32_t hex_color, uint32_t on_dur
     UPDATE FUNCTION
 */
 
-void LEDController::update()
+void LEDController::update(float input_x, float input_y, float input_rx, float input_ry)
 {
+    if (m_fade_active) {
+        update_fade();
+        return;
+    }
+
     // Save some cycles if off
     if (!is_on()) {
         return;
@@ -540,7 +734,12 @@ void LEDController::update()
         }
     }
 
-    if (m_current_state.mode == Mode::SOLID) {
+    if (LED_USE_INPUT_GLOW_EFFECT && !m_animation_running && m_current_state.mode == Mode::SOLID && m_current_state.color == LED_RUNNING_COLOR) {
+        // A rightward translation (+X) and a rightward tilt (+RY) point to the
+        // same LEDs. Likewise, a forward/up-ring tilt is represented by -RX.
+        update_input(input_x + input_ry, input_y - input_rx);
+    }
+    else if (m_current_state.mode == Mode::SOLID) {
         update_solid();
     }
     else if (m_current_state.mode == Mode::BLINKING) {

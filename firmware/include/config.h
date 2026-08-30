@@ -9,7 +9,7 @@
 
 // RGB LEDs
 #define LED_COUNT 8
-#define LED_BRIGHTNESS 100                             // 0 to 255
+#define LED_BRIGHTNESS 40                              // 0 to 255
 #define LED_BOOT_COLOR 0xFFFF00                        // Yellow
 #define LED_ERROR_COLOR 0xFF0000                       // Red
 #define LED_SUCCESS_COLOR 0x00FF00                     // Green
@@ -18,6 +18,9 @@
 #define LED_CALIBRATION_FAILURE_COLOR 0xFF00FF         // Magenta
 #define LED_RUNNING_COLOR 0xFFFFFF                     // White
 #define LED_RUNNING_WITHOUT_CALIBRATION_COLOR 0xFF6600 // Orange
+#define LED_USE_INPUT_GLOW_EFFECT true                 // Set false to disable LED input glow effect
+#define LED_INPUT_GLOW_COLOR 0x00FFFF                  // Cyan
+#define LED_INPUT_GLOW_MAX_BRIGHTNESS 255
 
 // State Machine
 #define BOOT_DELAY_MS 1000
