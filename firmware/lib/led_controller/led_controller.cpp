@@ -264,7 +264,7 @@ void LEDController::update_input(float input_x, float input_y)
     uint8_t running_r, running_g, running_b;
     uint8_t input_r, input_g, input_b;
     hex_to_rgb(LED_RUNNING_COLOR, running_r, running_g, running_b);
-    hex_to_rgb(LED_INPUT_COLOR, input_r, input_g, input_b);
+    hex_to_rgb(LED_INPUT_GLOW_COLOR, input_r, input_g, input_b);
 
     // Per-pixel brightness is encoded into the RGB channels so LEDs can have
     // different brightness levels. Global brightness must therefore be 255.
@@ -295,7 +295,7 @@ void LEDController::update_input(float input_x, float input_y)
             influence = clamp_unit(magnitude * projection / strongest_projection);
         }
 
-        const uint8_t brightness = lerp_channel(LED_BRIGHTNESS, 255, influence);
+        const uint8_t brightness = lerp_channel(LED_BRIGHTNESS, LED_INPUT_GLOW_MAX_BRIGHTNESS, influence);
         const uint8_t r = lerp_channel(running_r, input_r, influence);
         const uint8_t g = lerp_channel(running_g, input_g, influence);
         const uint8_t b = lerp_channel(running_b, input_b, influence);

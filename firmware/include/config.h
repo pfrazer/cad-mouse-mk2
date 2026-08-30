@@ -17,9 +17,10 @@
 #define LED_CALIBRATION_SUCCESS_COLOR 0x00FFFF         // Cyan
 #define LED_CALIBRATION_FAILURE_COLOR 0xFF00FF         // Magenta
 #define LED_RUNNING_COLOR 0xFFFFFF                     // White
-#define LED_INPUT_COLOR 0xFFFFFF                       // White
 #define LED_RUNNING_WITHOUT_CALIBRATION_COLOR 0xFF6600 // Orange
 #define LED_USE_INPUT_GLOW_EFFECT true                 // Set false to disable LED input glow effect
+#define LED_INPUT_GLOW_COLOR 0x00FFFF                  // Cyan
+#define LED_INPUT_GLOW_MAX_BRIGHTNESS 255
 
 // State Machine
 #define BOOT_DELAY_MS 1000
