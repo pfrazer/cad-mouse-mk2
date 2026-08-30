@@ -57,12 +57,38 @@
 #define EKF_JACOBIAN_MODE 1
 
 // Normalization, Deadzone, and Isolation
-#define NORMALIZATION_X_MAX 1.7f  // Maximum translation in mm for normalization
-#define NORMALIZATION_Y_MAX 1.7f  // Maximum translation in mm for normalization
-#define NORMALIZATION_Z_MAX 1.5f  // Maximum translation in mm for normalization TODO: might need different (lower) MAX than MIN
-#define NORMALIZATION_RX_MAX 6.5f // Maximum rotation in degrees for normalization
-#define NORMALIZATION_RY_MAX 6.5f // Maximum rotation in degrees for normalization
-#define NORMALIZATION_RZ_MAX 5.5f // Maximum rotation in degrees for normalization
+//
+// Physics model assumes (USB port facing away from user):
+// - x: right(+ / MAX), left(- / MIN)
+// - y: forward(+ / MAX), backward(- / MIN)
+// - z: up(+ / MAX), down(- / MIN)
+// - rx: roll backward(+ / MAX), roll forward(- / MIN)
+// - ry: pitch right(+ / MAX), pitch left(- / MIN)
+// - rz: yaw left(+ / MAX), yaw right(- / MIN)
+//
+// Yet for driver support some axes are flipped in HID report (y and z). This only affects the sign of the output,
+// but the MIN/MAX stay the same. The following describes the mapping from normalized state to HID report axes:
+// - x axis: right(+ / MAX), left(- / MIN) (no change)
+// - y axis: forward(- / MAX), backward(+ / MIN) (signs flipped)
+// - z axis: up(- / MAX), down(+ / MIN) (flipped)
+// - rx axis: roll backward(+ / MAX), roll forward(- / MIN) (no change)
+// - ry axis: pitch right(- / MAX), pitch left(+ / MIN) (signs flipped)
+// - rz axis: yaw left(- / MAX), yaw right(+ / MIN) (signs flipped)
+//
+// To make one direction more sensitive than the other, decrease the corresponding MIN or MAX value.
+// For example, to make upward movement more sensitive, decrease NORMALIZATION_Z_MAX.
+#define NORMALIZATION_X_MAX 1.7f  // Maximum translation in positive x shift mm for normalization
+#define NORMALIZATION_X_MIN 1.7f  // Maximum translation in negative x shift mm for normalization
+#define NORMALIZATION_Y_MAX 1.7f  // Maximum translation in positive y shift mm for normalization
+#define NORMALIZATION_Y_MIN 1.7f  // Maximum translation in negative y shift mm for normalization
+#define NORMALIZATION_Z_MAX 1.0f  // Maximum translation in positive z shift mm for normalization (make upward more sensitive)
+#define NORMALIZATION_Z_MIN 1.5f  // Maximum translation in negative z shift mm for normalization
+#define NORMALIZATION_RX_MAX 6.5f // Maximum rotation in positive rx shift degrees for normalization
+#define NORMALIZATION_RX_MIN 6.5f // Maximum rotation in negative rx shift degrees for normalization
+#define NORMALIZATION_RY_MAX 6.5f // Maximum rotation in positive ry shift degrees for normalization
+#define NORMALIZATION_RY_MIN 6.5f // Maximum rotation in negative ry shift degrees for normalization
+#define NORMALIZATION_RZ_MAX 5.5f // Maximum rotation in positive rz shift degrees for normalization
+#define NORMALIZATION_RZ_MIN 5.5f // Maximum rotation in negative rz shift degrees for normalization
 
 #define DEADZONE_TRANSLATION_THRESHOLD 0.05f // Deadzone threshold for translation in normalized units (5%)
 #define DEADZONE_ROTATION_THRESHOLD 0.05f    // Deadzone threshold for rotation in normalized units (5%)

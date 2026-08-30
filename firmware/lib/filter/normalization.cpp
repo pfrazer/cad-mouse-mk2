@@ -56,15 +56,25 @@ void Normalization::apply_normalization_deadzone_isolation(float state[12], floa
     // Per DoF Limits for normalization
     // We allow individual limits, as spring might behave differently for x,y vs z and rx,ry vs rz.
     // Yet for now, we will use the same limits for translation and rotation.
-    const float translation_limits[3] = {
+    const float translation_limits_max[3] = {
       NORMALIZATION_X_MAX,
       NORMALIZATION_Y_MAX,
       NORMALIZATION_Z_MAX,
     }; // mm
-    const float rotation_limits[3] = {
+    const float rotation_limits_max[3] = {
       NORMALIZATION_RX_MAX * (3.14159265f / 180.0f),
       NORMALIZATION_RY_MAX * (3.14159265f / 180.0f),
       NORMALIZATION_RZ_MAX * (3.14159265f / 180.0f),
+    }; // radians
+    const float translation_limits_min[3] = {
+      NORMALIZATION_X_MIN,
+      NORMALIZATION_Y_MIN,
+      NORMALIZATION_Z_MIN,
+    }; // mm
+    const float rotation_limits_min[3] = {
+      NORMALIZATION_RX_MIN * (3.14159265f / 180.0f),
+      NORMALIZATION_RY_MIN * (3.14159265f / 180.0f),
+      NORMALIZATION_RZ_MIN * (3.14159265f / 180.0f),
     }; // radians
 
     // == Normalize translation and rotation values to [-1, 1] range
@@ -76,10 +86,22 @@ void Normalization::apply_normalization_deadzone_isolation(float state[12], floa
     // - vrx,vry,vrz: radians/s -> effort%/s
     float normalized_state[12];
     for (int i = 0; i < 3; ++i) {
-        normalized_state[i] = state[i] / translation_limits[i];         // Translation
-        normalized_state[i + 3] = state[i + 3] / rotation_limits[i];    // Rotation
-        normalized_state[i + 6] = state[i + 6] / translation_limits[i]; // Translation Velocity
-        normalized_state[i + 9] = state[i + 9] / rotation_limits[i];    // Rotation Velocity
+        if (state[i] < 0.0f) {
+            normalized_state[i] = state[i] / translation_limits_min[i];         // Translation
+            normalized_state[i + 6] = state[i + 6] / translation_limits_min[i]; // Translation Velocity
+        }
+        else {
+            normalized_state[i] = state[i] / translation_limits_max[i];         // Translation
+            normalized_state[i + 6] = state[i + 6] / translation_limits_max[i]; // Translation Velocity
+        }
+        if (state[i + 3] < 0.0f) {
+            normalized_state[i + 3] = state[i + 3] / rotation_limits_min[i]; // Rotation
+            normalized_state[i + 9] = state[i + 9] / rotation_limits_min[i]; // Rotation Velocity
+        }
+        else {
+            normalized_state[i + 3] = state[i + 3] / rotation_limits_max[i]; // Rotation
+            normalized_state[i + 9] = state[i + 9] / rotation_limits_max[i]; // Rotation Velocity
+        }
     }
 
     // == Deadzone
