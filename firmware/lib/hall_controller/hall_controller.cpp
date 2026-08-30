@@ -56,6 +56,25 @@ void HallSensorController::begin()
     delay(10); // Wait for the sensor to stabilize
 }
 
+bool HallSensorController::enterLowPowerMode()
+{
+    return setPowerMode(TLx493D_LOW_POWER_MODE_e);
+}
+
+bool HallSensorController::enterFastMode()
+{
+    return setPowerMode(TLx493D_FAST_MODE_e);
+}
+
+bool HallSensorController::setPowerMode(TLx493D_PowerModeType_t mode)
+{
+    // Attempt all three writes even if an earlier sensor fails.
+    const bool s1 = m_sensor1.setPowerMode(mode);
+    const bool s2 = m_sensor2.setPowerMode(mode);
+    const bool s3 = m_sensor3.setPowerMode(mode);
+    return s1 && s2 && s3;
+}
+
 void HallSensorController::powerOff(uint8_t pin)
 {
     digitalWrite(pin, LOW);

@@ -76,6 +76,10 @@ HIDController hidController = HIDController();
 volatile uint32_t raw_mailbox_seq = 0;
 volatile uint32_t filtered_mailbox_seq = 0;
 
+// Core 0 owns state transitions. Core 1 only reads this flag to avoid running
+// the EKF while SLEEP state is waiting for raw motion.
+volatile uint32_t core1_sleeping = 0;
+
 // Shared raw sensor data mailbox (Core 0 producer -> Core 1 consumer)
 struct RawSensorData {
     float rawData[9];      // 3 sensors, each with 3 axes (X, Y, Z)
@@ -200,6 +204,22 @@ void loop()
 
     StateMachine::State current_state = stateMachine.get_state();
 
+    const bool sleeping = current_state == StateMachine::State::SLEEP;
+    // Match the Hall sensor conversion mode to the state. A transition caused
+    // later in this loop is applied immediately on the next iteration.
+    static bool hall_sensors_low_power = false;
+    if (sleeping && !hall_sensors_low_power) {
+        hall_sensors_low_power = hallController.enterLowPowerMode();
+    }
+    else if (!sleeping && hall_sensors_low_power) {
+        if (hallController.enterFastMode()) {
+            hall_sensors_low_power = false;
+        }
+    }
+
+    core1_sleeping = sleeping ? 1u : 0u;
+    __dmb();
+
     switch (current_state) {
         case StateMachine::State::BOOT: {
             // Give some time for the system to stabilize, then transition to CHECK_SENSORS
@@ -267,137 +287,208 @@ void loop()
             break;
         }
 
-        case StateMachine::State::RUNNING_NO_LED:
+        case StateMachine::State::SLEEP:
         case StateMachine::State::RUNNING_WITHOUT_CALIBRATION:
         case StateMachine::State::RUNNING: {
-            // RUNNING state: Normal operation,
+            // RUNNING state: Normal operation
             // Check for Core 1 response and update the latest estimated state
             // read raw sensor data, send to Core 1 for processing
-            // TODO: Send via HID to host computer
 
-            // Consume latest filtered data using seqlock snapshot.
-            static uint32_t last_filtered_seq = 0;
-            uint32_t filtered_s1 = 0;
-            uint32_t filtered_s2 = 0;
-            FilteredData local_filtered = {};
+            // SLEEP state: Power conserving operation
+            // Perform low-rate raw reads to watch for motion while Core 1 is sleeping
 
-            do {
-                filtered_s1 = filtered_mailbox_seq;
-                if (filtered_s1 & 1u) {
-                    continue;
+            // Data structures used by the SLEEP state
+            static uint32_t last_sleep_sensor_success_time_ms = 0;
+            static uint32_t last_sleep_wake_time_ms = 0;
+            static bool sleep_session_initialized = false;
+            static bool sleep_baseline_valid = false;
+            static float sleep_sensor_baseline[9] = {0.0f};
+            bool publish_raw_sample = current_state != StateMachine::State::SLEEP;
+            bool woke_from_sleep = false;
+
+            if (current_state == StateMachine::State::SLEEP) {
+                if (!sleep_session_initialized) {
+                    sleep_session_initialized = true;
+                    sleep_baseline_valid = false;
+                    last_sleep_sensor_success_time_ms = now;
                 }
 
-                __dmb();
-                local_filtered.x = sharedFilteredData.x;
-                local_filtered.y = sharedFilteredData.y;
-                local_filtered.z = sharedFilteredData.z;
-                local_filtered.rx = sharedFilteredData.rx;
-                local_filtered.ry = sharedFilteredData.ry;
-                local_filtered.rz = sharedFilteredData.rz;
-                local_filtered.vx = sharedFilteredData.vx;
-                local_filtered.vy = sharedFilteredData.vy;
-                local_filtered.vz = sharedFilteredData.vz;
-                local_filtered.vrx = sharedFilteredData.vrx;
-                local_filtered.vry = sharedFilteredData.vry;
-                local_filtered.vrz = sharedFilteredData.vrz;
-                local_filtered.dt = sharedFilteredData.dt;
-                __dmb();
+                // In the SLEEP state, perform only a low-rate raw read, once per iteration.
+                // Sample rate is controlled by SLEEP_SAMPLE_INTERVAL_MS which controls the
+                // duration of core sleep while in this state.
+                // Do not wake Core 1 until motion has been detected.
+                sensor_status = hallController.read(rawSensorData);
+#if DEBUG_MAIN_SERIAL
+                Helpers::print_raw_sensor_data(rawSensorData);
+#endif
 
-                filtered_s2 = filtered_mailbox_seq;
-            } while ((filtered_s1 != filtered_s2) || (filtered_s2 & 1u));
+                if (sensor_status == HALL_STATUS_OK) {
+                    last_sleep_sensor_success_time_ms = now;
 
-            if (filtered_s2 != 0 && filtered_s2 != last_filtered_seq) {
-                last_filtered_seq = filtered_s2;
+                    if (!sleep_baseline_valid) {
+                        for (int i = 0; i < 9; ++i) {
+                            sleep_sensor_baseline[i] = rawSensorData[i];
+                        }
+                        sleep_baseline_valid = true;
+                    }
+                    else {
+                        for (int i = 0; i < 9; ++i) {
+                            if (fabsf(rawSensorData[i] - sleep_sensor_baseline[i]) >= SLEEP_LED_WAKE_THRESHOLD) {
+                                woke_from_sleep = true;
+                                break;
+                            }
+                        }
 
-                stateMachine.set_last_filtered_data_received_time_ms(now);
+                        if (!woke_from_sleep) {
+                            // Slowly adjust the baseline while sleeping in case there is any sensor drift
+                            for (int i = 0; i < 9; ++i) {
+                                sleep_sensor_baseline[i] += SLEEP_BASELINE_ALPHA * (rawSensorData[i] - sleep_sensor_baseline[i]);
+                            }
+                        }
+                    }
+                }
+
+                if (woke_from_sleep) {
+                    // Prepare for transition to a RUNNING state below
+                    if (hallController.enterFastMode()) {
+                        hall_sensors_low_power = false;
+                    }
+                    core1_sleeping = 0u;
+                    __dmb();
+                    last_sleep_wake_time_ms = now;
+                    publish_raw_sample = true;
+                }
+            }
+            else {
+                // Normal operation
+                
+                if (sleep_session_initialized) {
+                    // Reset sleep state session
+                    sleep_session_initialized = false;
+                    sleep_baseline_valid = false;
+                }
+
+                // Consume latest filtered data using seqlock snapshot.
+                static uint32_t last_filtered_seq = 0;
+                uint32_t filtered_s1 = 0;
+                uint32_t filtered_s2 = 0;
+                FilteredData local_filtered = {};
+
+                do {
+                    filtered_s1 = filtered_mailbox_seq;
+                    if (filtered_s1 & 1u) {
+                        continue;
+                    }
+
+                    __dmb();
+                    local_filtered.x = sharedFilteredData.x;
+                    local_filtered.y = sharedFilteredData.y;
+                    local_filtered.z = sharedFilteredData.z;
+                    local_filtered.rx = sharedFilteredData.rx;
+                    local_filtered.ry = sharedFilteredData.ry;
+                    local_filtered.rz = sharedFilteredData.rz;
+                    local_filtered.vx = sharedFilteredData.vx;
+                    local_filtered.vy = sharedFilteredData.vy;
+                    local_filtered.vz = sharedFilteredData.vz;
+                    local_filtered.vrx = sharedFilteredData.vrx;
+                    local_filtered.vry = sharedFilteredData.vry;
+                    local_filtered.vrz = sharedFilteredData.vrz;
+                    local_filtered.dt = sharedFilteredData.dt;
+                    __dmb();
+
+                    filtered_s2 = filtered_mailbox_seq;
+                } while ((filtered_s1 != filtered_s2) || (filtered_s2 & 1u));
+
+                if (filtered_s2 != 0 && filtered_s2 != last_filtered_seq) {
+                    last_filtered_seq = filtered_s2;
+
+                    stateMachine.set_last_filtered_data_received_time_ms(now);
 
 #if defined(ENABLE_PERFORMANCE_PROFILING) && (PERFORMANCE_PROFILING_LEVEL == 1)
-                lite_profiler_on_new_filtered_value(now);
+                    lite_profiler_on_new_filtered_value(now);
 #endif
 
-                latest_estimated_state[0] = local_filtered.x;
-                latest_estimated_state[1] = local_filtered.y;
-                latest_estimated_state[2] = local_filtered.z;
-                latest_estimated_state[3] = local_filtered.rx;
-                latest_estimated_state[4] = local_filtered.ry;
-                latest_estimated_state[5] = local_filtered.rz;
-                latest_estimated_state[6] = local_filtered.vx;
-                latest_estimated_state[7] = local_filtered.vy;
-                latest_estimated_state[8] = local_filtered.vz;
-                latest_estimated_state[9] = local_filtered.vrx;
-                latest_estimated_state[10] = local_filtered.vry;
-                latest_estimated_state[11] = local_filtered.vrz;
+                    latest_estimated_state[0] = local_filtered.x;
+                    latest_estimated_state[1] = local_filtered.y;
+                    latest_estimated_state[2] = local_filtered.z;
+                    latest_estimated_state[3] = local_filtered.rx;
+                    latest_estimated_state[4] = local_filtered.ry;
+                    latest_estimated_state[5] = local_filtered.rz;
+                    latest_estimated_state[6] = local_filtered.vx;
+                    latest_estimated_state[7] = local_filtered.vy;
+                    latest_estimated_state[8] = local_filtered.vz;
+                    latest_estimated_state[9] = local_filtered.vrx;
+                    latest_estimated_state[10] = local_filtered.vry;
+                    latest_estimated_state[11] = local_filtered.vrz;
 
-                // Print roundtrip time between consecutive readings->filtering->return
-                // Implies frequency of HID updates must be less than this
-                float dt_ms = local_filtered.dt * 1e3;
-                MAIN_TIMING_LOG_PRINT("Filter DT: ");
-                MAIN_TIMING_LOG_PRINTF("%.3f", dt_ms);
-                MAIN_TIMING_LOG_PRINTLN(" ms");
+                    // Print roundtrip time between consecutive readings->filtering->return
+                    // Implies frequency of HID updates must be less than this
+                    float dt_ms = local_filtered.dt * 1e3;
+                    MAIN_TIMING_LOG_PRINT("Filter DT: ");
+                    MAIN_TIMING_LOG_PRINT(dt_ms);
+                    MAIN_TIMING_LOG_PRINTLN(" ms");
 
 #if DEBUG_MAIN_SERIAL
-                // Print the latest estimated state for debugging
-                Helpers::print_estimated_state(latest_estimated_state);
-                // Condensed print for debugging
-                // Helpers::print_condensed_estimated_state(latest_estimated_state);
+                    // Print the latest estimated state for debugging
+                    Helpers::print_estimated_state(latest_estimated_state);
+                    // Condensed print for debugging
+                    // Helpers::print_condensed_estimated_state(latest_estimated_state);
 #endif
-            }
-
-            // Publish latest raw sample (overwrite mailbox; no queue backlog).
-            PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_SENSOR_READ);
-            sensor_status = hallController.read(rawSensorData);
-            PERFORMANCE_END(0, PerformanceProfiler::Section::CORE0_SENSOR_READ);
-
-#if DEBUG_MAIN_SERIAL
-            Helpers::print_raw_sensor_data(rawSensorData);
-#endif
-
-            if (sensor_status == HALL_STATUS_OK) {
-                PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_HANDOVER);
-                const uint32_t seq0 = raw_mailbox_seq;
-                raw_mailbox_seq = seq0 + 1u; // mark write-in-progress (odd)
-                __dmb();
-
-                for (int i = 0; i < 9; ++i) {
-                    sharedRawSensorData.rawData[i] = rawSensorData[i];
                 }
-                sharedRawSensorData.timestamp_us = micros();
 
-                __dmb();
-                raw_mailbox_seq = seq0 + 2u; // mark stable payload (even)
-                PERFORMANCE_END(0, PerformanceProfiler::Section::CORE0_HANDOVER);
+                PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_SENSOR_READ);
+                sensor_status = hallController.read(rawSensorData);
+                PERFORMANCE_END(0, PerformanceProfiler::Section::CORE0_SENSOR_READ);
+#if DEBUG_MAIN_SERIAL
+                Helpers::print_raw_sensor_data(rawSensorData);
+#endif
+
+                if (sensor_status == HALL_STATUS_OK && publish_raw_sample) {
+                    PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_HANDOVER);
+                    const uint32_t seq0 = raw_mailbox_seq;
+                    raw_mailbox_seq = seq0 + 1u; // mark write-in-progress (odd)
+                    __dmb();
+
+                    for (int i = 0; i < 9; ++i) {
+                        sharedRawSensorData.rawData[i] = rawSensorData[i];
+                    }
+                    sharedRawSensorData.timestamp_us = micros();
+
+                    __dmb();
+                    raw_mailbox_seq = seq0 + 2u; // mark stable payload (even)
+                    PERFORMANCE_END(0, PerformanceProfiler::Section::CORE0_HANDOVER);
+                }
             }
-
-            // TODO: Send HID data at fixed intervals > dt of Kalman
 
             // Timeout check (no sensor readings) -> SENSOR_RECONNECT state
-            if (now - stateMachine.get_last_filtered_data_received_time_ms() > RUNNING_STATE_READ_ERROR_TIMEOUT_MS) {
+            const bool idle_sensor_timeout = current_state == StateMachine::State::SLEEP && sleep_session_initialized && now - last_sleep_sensor_success_time_ms > SLEEP_SENSOR_ERROR_TIMEOUT_MS;
+            const bool active_filter_timeout = current_state != StateMachine::State::SLEEP && now - stateMachine.get_last_filtered_data_received_time_ms() > RUNNING_STATE_READ_ERROR_TIMEOUT_MS;
+            if (idle_sensor_timeout || active_filter_timeout) {
                 stateMachine.enter_SENSOR_ERROR();
                 break;
             }
 
-            // Transition between different RUNNING_... states
-            if (now - hidController.get_last_report_time_ms() > RUNNING_STATE_INACTIVITY_TIMEOUT_MS) {
-                // Transition to RUNNING_NO_LED on inactivity.
+            // Transition between RUNNING and SLEEP states
+            const bool wake_grace_active = now - last_sleep_wake_time_ms <= SLEEP_WAKE_GRACE_MS;
+            if (!woke_from_sleep && !wake_grace_active && now - hidController.get_last_report_time_ms() > RUNNING_STATE_INACTIVITY_TIMEOUT_MS) {
+                // Transition to SLEEP on inactivity.
                 // We can infer inactivity by checking time last HID report was sent
                 // as we only send HID on changes in axes or buttons.
-                stateMachine.enter_RUNNING_NO_LED(); // does nothing if already in RUNNING_NO_LED state
-                break;
+                stateMachine.enter_SLEEP(); // does nothing if already in SLEEP state
             }
             else {
                 // Transition back to RUNNING or RUNNING_WITHOUT_CALIBRATION on activity,
                 // depending on whether calibration data is available.
                 if (stateMachine.get_calibration_load_state() != Calibration::LoadState::NO_FILE_USING_DEFAULTS) {
                     stateMachine.enter_RUNNING(); // does nothing if already in RUNNING state
-                    break;
                 }
                 else {
                     stateMachine.enter_RUNNING_WITHOUT_CALIBRATION(); // does nothing if already in RUNNING_WITHOUT_CALIBRATION state
-                    break;
                 }
             }
             break;
         }
+
         default: {
             // Serial.println("Unknown state. Should not happen.");
             break;
@@ -449,6 +540,11 @@ void loop()
 #if defined(ENABLE_PERFORMANCE_PROFILING) && (PERFORMANCE_PROFILING_LEVEL >= 2)
     PerformanceProfiler::print_if_due(0, now, PERFORMANCE_PRINT_INTERVAL_MS);
 #endif
+
+    // Delay next iteration if sleeping
+    if (stateMachine.get_state() == StateMachine::State::SLEEP) {
+        delay(SLEEP_SAMPLE_INTERVAL_MS);
+    }
 }
 
 void setup1()
@@ -459,6 +555,11 @@ void setup1()
 
 void loop1()
 {
+    if (core1_sleeping != 0u) {
+        delay(SLEEP_SAMPLE_INTERVAL_MS);
+        return;
+    }
+
     // Consume latest raw sample using seqlock snapshot.
     static uint32_t last_time_us = 0;
     static uint32_t last_raw_seq = 0;
