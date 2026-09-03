@@ -11,6 +11,7 @@
 #include "led_controller.h"
 #include "normalization.h"
 #include "performance_profiler.h"
+#include "power_manager.h"
 #include "state_machine.h"
 
 #if DEBUG_MAIN_SERIAL
@@ -173,6 +174,8 @@ namespace {
 
 void setup()
 {
+    PowerManager::begin();
+
     Serial.begin(115200);
 
     // Initialize HID controller for USB communication
@@ -208,11 +211,21 @@ void loop()
     // Match the Hall sensor conversion mode to the state. A transition caused
     // later in this loop is applied immediately on the next iteration.
     static bool hall_sensors_low_power = false;
-    if (sleeping && !hall_sensors_low_power) {
-        hall_sensors_low_power = hallController.enterLowPowerMode();
+    if (sleeping) {
+        if (!hall_sensors_low_power) {
+            hall_sensors_low_power = hallController.enterLowPowerMode();
+        }
+
+        // Keep the awake system clock until fade_off() has sent its final
+        // zero frame and disabled the LED rail. The RP2040 NeoPixel PIO timing
+        // is configured for the awake clock and is not automatically retuned.
+        if (hall_sensors_low_power && !ledController.is_fading()) {
+            PowerManager::enterSleep();
+        }
     }
-    else if (!sleeping && hall_sensors_low_power) {
-        if (hallController.enterFastMode()) {
+    else if (!sleeping) {
+        PowerManager::exitSleep();
+        if (hall_sensors_low_power && hallController.enterFastMode()) {
             hall_sensors_low_power = false;
         }
     }
@@ -350,6 +363,7 @@ void loop()
 
                 if (woke_from_sleep) {
                     // Prepare for transition to a RUNNING state below
+                    PowerManager::exitSleep();
                     if (hallController.enterFastMode()) {
                         hall_sensors_low_power = false;
                     }
@@ -479,6 +493,11 @@ void loop()
             else {
                 // Transition back to RUNNING or RUNNING_WITHOUT_CALIBRATION on activity,
                 // depending on whether calibration data is available.
+                // Restore clocks before enter_RUNNING() starts fade_on(). This
+                // is required for non-Hall wake paths such as button activity.
+                if (current_state == StateMachine::State::SLEEP) {
+                    PowerManager::exitSleep();
+                }
                 if (stateMachine.get_calibration_load_state() != Calibration::LoadState::NO_FILE_USING_DEFAULTS) {
                     stateMachine.enter_RUNNING(); // does nothing if already in RUNNING state
                 }

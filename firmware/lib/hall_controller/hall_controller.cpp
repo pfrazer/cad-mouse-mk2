@@ -39,6 +39,7 @@ void HallSensorController::begin()
     m_sensor1.setIICAddress(TLx493D_IIC_ADDR_A2_e);
     m_sensor1.setPowerMode(TLx493D_FAST_MODE_e);
     m_sensor1.setSensitivity(m_sensitivity);
+    m_sensor1.setMeasurement(TLx493D_BxByBz_e); // Temperature is unused; measure magnetic axes only.
     delay(10); // Wait for the sensor to stabilize
 
     powerOn(m_sensor2PowerPin);
@@ -46,6 +47,7 @@ void HallSensorController::begin()
     m_sensor2.setIICAddress(TLx493D_IIC_ADDR_A1_e);
     m_sensor2.setPowerMode(TLx493D_FAST_MODE_e);
     m_sensor2.setSensitivity(m_sensitivity);
+    m_sensor2.setMeasurement(TLx493D_BxByBz_e);
     delay(10); // Wait for the sensor to stabilize
 
     powerOn(m_sensor3PowerPin);
@@ -53,16 +55,26 @@ void HallSensorController::begin()
     m_sensor3.setIICAddress(TLx493D_IIC_ADDR_A0_e);
     m_sensor3.setPowerMode(TLx493D_FAST_MODE_e);
     m_sensor3.setSensitivity(m_sensitivity);
+    m_sensor3.setMeasurement(TLx493D_BxByBz_e);
     delay(10); // Wait for the sensor to stabilize
 }
 
 bool HallSensorController::enterLowPowerMode()
 {
-    return setPowerMode(TLx493D_LOW_POWER_MODE_e);
+    // A2B6 slow update rate is 10 Hz, matching the sleep polling interval.
+    // Attempt every write so one unavailable sensor does not prevent the
+    // remaining sensors from entering their lowest useful measurement mode.
+    const bool s1_rate = m_sensor1.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+    const bool s2_rate = m_sensor2.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+    const bool s3_rate = m_sensor3.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+    const bool power_mode_set = setPowerMode(TLx493D_LOW_POWER_MODE_e);
+    return s1_rate && s2_rate && s3_rate && power_mode_set;
 }
 
 bool HallSensorController::enterFastMode()
 {
+    // The low-power update-rate bit is ignored in fast mode, so leave it at
+    // 10 Hz for the next sleep transition and avoid three unnecessary writes.
     return setPowerMode(TLx493D_FAST_MODE_e);
 }
 
