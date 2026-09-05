@@ -100,7 +100,7 @@
 
 // Defines HID report logical min/max value
 // 350 is a reasonable starting point; increasing this number increases maximum on-screen velocity
-#define AXIS_LIMIT 400
+#define AXIS_LIMIT 350
 
 
 // Calibration
