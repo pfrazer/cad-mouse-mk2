@@ -98,6 +98,11 @@
 
 #define ISOLATION_POWER 3.0f // Power for curved isolation (3.0f -> cubic isolation); while being a float, only 1, 2, 3, and 0.5 are optimized for RP2350 hardware. Other values will be slow.
 
+// Defines HID report logical min/max value
+// 350 is a reasonable starting point; increasing this number increases maximum on-screen velocity
+#define AXIS_LIMIT 400
+
+
 // Calibration
 #define CALIBRATION_DATA_STD_THRESHOLD 0.5f // Standard deviation threshold to accept collected raw data samples for calibration
 
