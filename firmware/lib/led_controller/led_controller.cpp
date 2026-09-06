@@ -270,6 +270,13 @@ void LEDController::update_solid()
 
 void LEDController::update_input(float input_x, float input_y, float input_z, float input_rz)
 {
+    // Rate limit these non-critical calculations and LED updates to ~60Hz
+    uint32_t now = millis();
+    if (now - m_last_update_time_ms < 16) {
+        return;
+    }
+    m_last_update_time_ms = now;
+
     const float magnitude = clamp_unit(sqrtf(input_x * input_x + input_y * input_y));
 
     uint8_t running_r, running_g, running_b;
