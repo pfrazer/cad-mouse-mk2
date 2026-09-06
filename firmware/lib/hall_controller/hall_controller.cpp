@@ -57,25 +57,38 @@ void HallSensorController::begin()
     m_sensor3.setSensitivity(m_sensitivity);
     m_sensor3.setMeasurement(TLx493D_BxByBz_e);
     delay(10); // Wait for the sensor to stabilize
+
+    m_in_low_power_mode = false;
+}
+
+bool HallSensorController::isInLowPowerMode()
+{
+    return m_in_low_power_mode;
 }
 
 bool HallSensorController::enterLowPowerMode()
 {
-    // A2B6 slow update rate is 10 Hz, matching the sleep polling interval.
-    // Attempt every write so one unavailable sensor does not prevent the
-    // remaining sensors from entering their lowest useful measurement mode.
-    const bool s1_rate = m_sensor1.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
-    const bool s2_rate = m_sensor2.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
-    const bool s3_rate = m_sensor3.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
-    const bool power_mode_set = setPowerMode(TLx493D_LOW_POWER_MODE_e);
-    return s1_rate && s2_rate && s3_rate && power_mode_set;
+    if (!m_in_low_power_mode) {
+        // A2B6 slow update rate is 10 Hz, matching the sleep polling interval.
+        // Attempt every write so one unavailable sensor does not prevent the
+        // remaining sensors from entering their lowest useful measurement mode.
+        const bool s1_rate = m_sensor1.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+        const bool s2_rate = m_sensor2.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+        const bool s3_rate = m_sensor3.setUpdateRate(TLx493D_UPDATE_RATE_SLOW_e);
+        const bool power_mode_set = setPowerMode(TLx493D_LOW_POWER_MODE_e);
+        m_in_low_power_mode = s1_rate && s2_rate && s3_rate && power_mode_set;
+    }
+    return m_in_low_power_mode;
 }
 
 bool HallSensorController::enterFastMode()
 {
-    // The low-power update-rate bit is ignored in fast mode, so leave it at
-    // 10 Hz for the next sleep transition and avoid three unnecessary writes.
-    return setPowerMode(TLx493D_FAST_MODE_e);
+    if (m_in_low_power_mode) {
+        // The low-power update-rate bit is ignored in fast mode, so leave it at
+        // 10 Hz for the next sleep transition and avoid three unnecessary writes.
+        m_in_low_power_mode = !setPowerMode(TLx493D_FAST_MODE_e);
+    }
+    return m_in_low_power_mode;
 }
 
 bool HallSensorController::setPowerMode(TLx493D_PowerModeType_t mode)

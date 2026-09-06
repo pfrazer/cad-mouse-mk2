@@ -213,4 +213,9 @@ void exitSleep()
 #endif
 }
 
+bool sleepActive()
+{
+    return g_sleep_clocks_active;
+}
+
 } // namespace PowerManager

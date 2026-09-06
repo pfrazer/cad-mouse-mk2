@@ -9,5 +9,6 @@ void begin();
 // and memory. These functions are no-ops on other targets and safe to repeat.
 void enterSleep();
 void exitSleep();
+bool sleepActive();
 
 } // namespace PowerManager

@@ -210,24 +210,19 @@ void loop()
     const bool sleeping = current_state == StateMachine::State::SLEEP;
     // Match the Hall sensor conversion mode to the state. A transition caused
     // later in this loop is applied immediately on the next iteration.
-    static bool hall_sensors_low_power = false;
     if (sleeping) {
-        if (!hall_sensors_low_power) {
-            hall_sensors_low_power = hallController.enterLowPowerMode();
-        }
+        hallController.enterLowPowerMode();
 
         // Keep the awake system clock until fade_off() has sent its final
         // zero frame and disabled the LED rail. The RP2040 NeoPixel PIO timing
         // is configured for the awake clock and is not automatically retuned.
-        if (hall_sensors_low_power && !ledController.is_fading()) {
+        if (hallController.isInLowPowerMode() && !ledController.is_fading()) {
             PowerManager::enterSleep();
         }
     }
     else if (!sleeping) {
         PowerManager::exitSleep();
-        if (hall_sensors_low_power && hallController.enterFastMode()) {
-            hall_sensors_low_power = false;
-        }
+        hallController.enterFastMode();
     }
 
     core1_sleeping = sleeping ? 1u : 0u;
@@ -316,7 +311,6 @@ void loop()
             static bool sleep_session_initialized = false;
             static bool sleep_baseline_valid = false;
             static float sleep_sensor_baseline[9] = {0.0f};
-            bool publish_raw_sample = current_state != StateMachine::State::SLEEP;
             bool woke_from_sleep = false;
 
             if (current_state == StateMachine::State::SLEEP) {
@@ -326,36 +320,39 @@ void loop()
                     last_sleep_sensor_success_time_ms = now;
                 }
 
-                // In the SLEEP state, perform only a low-rate raw read, once per iteration.
-                // Sample rate is controlled by SLEEP_SAMPLE_INTERVAL_MS which controls the
-                // duration of core sleep while in this state.
-                // Do not wake Core 1 until motion has been detected.
-                sensor_status = hallController.read(rawSensorData);
+                // Internally rate limit the sensor reads until the core 0 delay kicks in so that the LED fade doesn't jitter
+                if (PowerManager::sleepActive() || now - last_sleep_sensor_success_time_ms >= SLEEP_SAMPLE_INTERVAL_MS) {
+                    // In the SLEEP state, perform only a low-rate raw read, once per iteration.
+                    // Sample rate is controlled by SLEEP_SAMPLE_INTERVAL_MS which controls the
+                    // duration of core sleep while in this state.
+                    // Do not wake Core 1 until motion has been detected.
+                    sensor_status = hallController.read(rawSensorData);
 #if DEBUG_MAIN_SERIAL
-                Helpers::print_raw_sensor_data(rawSensorData);
+                    Helpers::print_raw_sensor_data(rawSensorData);
 #endif
 
-                if (sensor_status == HALL_STATUS_OK) {
-                    last_sleep_sensor_success_time_ms = now;
+                    if (sensor_status == HALL_STATUS_OK) {
+                        last_sleep_sensor_success_time_ms = now;
 
-                    if (!sleep_baseline_valid) {
-                        for (int i = 0; i < 9; ++i) {
-                            sleep_sensor_baseline[i] = rawSensorData[i];
-                        }
-                        sleep_baseline_valid = true;
-                    }
-                    else {
-                        for (int i = 0; i < 9; ++i) {
-                            if (fabsf(rawSensorData[i] - sleep_sensor_baseline[i]) >= SLEEP_LED_WAKE_THRESHOLD) {
-                                woke_from_sleep = true;
-                                break;
-                            }
-                        }
-
-                        if (!woke_from_sleep) {
-                            // Slowly adjust the baseline while sleeping in case there is any sensor drift
+                        if (!sleep_baseline_valid) {
                             for (int i = 0; i < 9; ++i) {
-                                sleep_sensor_baseline[i] += SLEEP_BASELINE_ALPHA * (rawSensorData[i] - sleep_sensor_baseline[i]);
+                                sleep_sensor_baseline[i] = rawSensorData[i];
+                            }
+                            sleep_baseline_valid = true;
+                        }
+                        else {
+                            for (int i = 0; i < 9; ++i) {
+                                if (fabsf(rawSensorData[i] - sleep_sensor_baseline[i]) >= SLEEP_LED_WAKE_THRESHOLD) {
+                                    woke_from_sleep = true;
+                                    break;
+                                }
+                            }
+
+                            if (!woke_from_sleep) {
+                                // Slowly adjust the baseline while sleeping in case there is any sensor drift
+                                for (int i = 0; i < 9; ++i) {
+                                    sleep_sensor_baseline[i] += SLEEP_BASELINE_ALPHA * (rawSensorData[i] - sleep_sensor_baseline[i]);
+                                }
                             }
                         }
                     }
@@ -364,13 +361,10 @@ void loop()
                 if (woke_from_sleep) {
                     // Prepare for transition to a RUNNING state below
                     PowerManager::exitSleep();
-                    if (hallController.enterFastMode()) {
-                        hall_sensors_low_power = false;
-                    }
+                    hallController.enterFastMode();
                     core1_sleeping = 0u;
                     __dmb();
                     last_sleep_wake_time_ms = now;
-                    publish_raw_sample = true;
                 }
             }
             else {
@@ -457,7 +451,7 @@ void loop()
                 Helpers::print_raw_sensor_data(rawSensorData);
 #endif
 
-                if (sensor_status == HALL_STATUS_OK && publish_raw_sample) {
+                if (sensor_status == HALL_STATUS_OK) {
                     PERFORMANCE_BEGIN(0, PerformanceProfiler::Section::CORE0_HANDOVER);
                     const uint32_t seq0 = raw_mailbox_seq;
                     raw_mailbox_seq = seq0 + 1u; // mark write-in-progress (odd)
@@ -561,7 +555,7 @@ void loop()
 #endif
 
     // Delay next iteration if sleeping
-    if (stateMachine.get_state() == StateMachine::State::SLEEP) {
+    if (PowerManager::sleepActive()) {
         delay(SLEEP_SAMPLE_INTERVAL_MS);
     }
 }
