@@ -491,6 +491,13 @@ void loop()
                 // is required for non-Hall wake paths such as button activity.
                 if (current_state == StateMachine::State::SLEEP) {
                     PowerManager::exitSleep();
+
+                    // When waking from sleep, force a neutral HID update. This avoids going right back to
+                    // sleep after a very brief input that doesn't result in a HID report because core 1 hasn't resynced.
+                    for (int i = 0; i < 12; i++) {
+                        latest_estimated_state[i] = 0.0;
+                    }
+                    hidController.sendReport(latest_estimated_state, 0, true);
                 }
                 if (stateMachine.get_calibration_load_state() != Calibration::LoadState::NO_FILE_USING_DEFAULTS) {
                     stateMachine.enter_RUNNING(); // does nothing if already in RUNNING state
@@ -541,7 +548,7 @@ void loop()
         MAIN_LOG_PRINTLN("Right button released");
         buttons &= ~0x0002; // Clear bit 1 for right button release
     }
-    hidController.sendReport(latest_estimated_state, buttons);
+    hidController.sendReport(latest_estimated_state, buttons, false);
 
     // LED controller update
     ledController.update(
