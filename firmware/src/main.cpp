@@ -342,7 +342,7 @@ void loop()
                         }
                         else {
                             for (int i = 0; i < 9; ++i) {
-                                if (fabsf(rawSensorData[i] - sleep_sensor_baseline[i]) >= SLEEP_LED_WAKE_THRESHOLD) {
+                                if (fabsf(rawSensorData[i] - sleep_sensor_baseline[i]) >= SLEEP_WAKE_THRESHOLD) {
                                     woke_from_sleep = true;
                                     break;
                                 }
